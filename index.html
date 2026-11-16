@@ -5811,7 +5811,11 @@
 // Supabase 設定（v230）
 // ============================================================
 // v293：畫面版號單一出處（出新版 SOP＝cp 檔 → 先改 APP_VER → 才改功能；注入三處＝分頁標題／大廳頂欄右上／登入頁頁腳，比照 QMS/MHR）
-const APP_VER = 'V326';
+const APP_VER = 'V327';
+// v327（261116）：大廳點卡片先發票——系統清單新增「已能接收大廳的票」開關（oms_systems.sso_ticket，SQL 332，預設關）；
+//   開關打開的系統：已登入的人點卡片＝先呼叫後端 sso-ticket 發一次性票（60 秒、只能用一次），再開「登記網址#sso=票」，對方系統換票後免打密碼。
+//   沒勾這個系統＝提示未授權；其他錯誤（連不上、後端沒回）＝照舊直接開網址讓同仁自己登入。沒登入、開關沒開＝跟以前一樣直接開網址。
+//   點下去當下先開空白分頁、拿到票再把分頁轉過去（等完才開會被瀏覽器當成彈出視窗擋掉）。
 // v326（261113）：帳號名冊只給管理員——①登入後只有集團系統管理員才讀帳號名冊（其他角色用不到，原本每個人都讀進 214 筆）
 //   ②管理員讀帳號名冊改走管理後端 synchub-admin-users 的 list（後端驗管理員身分），不再讀公開的 oms_roster
 //   ③讀不到帳號名冊時，廠區控制頁「OMS 角色範圍含此廠的帳號」顯示「讀不到」，不再顯示 0 個
@@ -10735,7 +10739,7 @@ let _omsSysFull = false;      // true＝登入狀態讀的（含「不顯示」�
 function omsSysFromRow(r) {
   return { code: r.code, name: r.name || r.code, url: r.url || '', icon: r.icon || '',
     status: (r.home_status === 'live' || r.home_status === 'soon') ? r.home_status : 'hidden',
-    soonMsg: r.soon_msg || '', inAccess: r.in_access !== false, sort: (r.sort_order == null ? 100 : r.sort_order),
+    soonMsg: r.soon_msg || '', inAccess: r.in_access !== false, ssoTicket: r.sso_ticket === true, sort: (r.sort_order == null ? 100 : r.sort_order),
     updatedAt: r.updated_at || '', updatedBy: r.updated_by || '' };
 }
 function omsSysSorted(list) { return list.slice().sort((a, b) => (a.sort - b.sort) || String(a.code).localeCompare(String(b.code))); }
@@ -10788,12 +10792,38 @@ function renderHubGrid() {
     '<div class="synchub-app" onclick="hubOpenSystem(\'' + esc(s.code) + '\')" title="' + esc(s.name) + '">' +
     '<img src="' + esc(OMS_SYS_ICON_BASE + encodeURIComponent(s.icon)) + '" class="synchub-app-icon" alt="' + esc(s.code) + '"></div>').join('');
 }
-function hubOpenSystem(code) {
+async function hubOpenSystem(code) {
   const s = OMS_SYSTEMS.find(x => x.code === code); if (!s) return;
   if (s.status === 'soon') { showSyncHubToast(s.soonMsg || (s.code + ' ' + s.name + '即將上線，敬請期待')); return; }
   if (s.code === 'OMS') { enterOMS(); return; }
-  if (s.url) window.open(s.url, '_blank');
-  else showSyncHubToast(s.code + ' ' + s.name + '還沒有設定網址，請洽 DTO');
+  if (!s.url) { showSyncHubToast(s.code + ' ' + s.name + '還沒有設定網址，請洽 DTO'); return; }
+  // v327：這個系統已能接收票、而且大廳已登入 → 先發票，再開「登記網址#sso=票」
+  if (s.ssoTicket && _omsJWT && currentUser) {
+    const w = window.open('about:blank', '_blank');   // 點下去當下先開分頁；拿票要等一下，等完才開會被瀏覽器擋掉
+    const go = (dest) => { if (w && !w.closed) { try { w.opener = null; } catch (e) {} w.location.replace(dest); } else window.open(dest, '_blank'); };
+    const r = await hubIssueTicket(s.code);
+    if (r.status === 200 && r.ticket && /^https:\/\//.test(r.url || '')) { go(String(r.url).split('#')[0] + '#sso=' + encodeURIComponent(r.ticket)); return; }
+    if (r.status === 403 && r.error === 'not_authorized') {
+      if (w && !w.closed) w.close();
+      showSyncHubToast('您沒有 ' + s.code + ' ' + s.name + ' 的使用權限，請洽 DTO 於 OMS 開通'); return;
+    }
+    console.warn('[v327] 發票失敗，改成直接開網址讓同仁自己登入：', r.status, r.error || '');
+    go(s.url); return;
+  }
+  window.open(s.url, '_blank');
+}
+// v327：向後端 sso-ticket 要一張票（5 秒沒回應就放棄）；回 {status, ticket, url, error}，連不上＝status 0
+async function hubIssueTicket(code) {
+  const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), 5000) : null;
+  try {
+    const res = await sbFetch(SB_URL + '/functions/v1/sso-ticket',
+      { method: 'POST', headers: sbHdr(), body: JSON.stringify({ system: code }), signal: ctl ? ctl.signal : undefined });
+    let j = {}; try { j = await res.json(); } catch (e) {}
+    return { status: res.status, ticket: j.ticket || '', url: j.url || '', error: j.error || '' };
+  } catch (e) {
+    return { status: 0, error: (e && e.name === 'AbortError') ? 'timeout' : ((e && e.message) || String(e)) };
+  } finally { if (timer) clearTimeout(timer); }
 }
 
 // --- 系統清單管理頁（管理工具 → 系統清單管理；admin 限定）---
@@ -10836,11 +10866,11 @@ function renderSysListMgmt() {
   const rows = list.map((s, i) => {
     const shown = (s.status === 'live' || s.status === 'soon') && s.icon;
     if (shown) homeNo++;
-    const when = s.updatedAt ? new Date(s.updatedAt).toLocaleString('zh-TW', { hour12: false }) : '';
+    const when = s.updatedAt ? new Date(s.updatedAt).toLocaleString('zh-TW', { hour12: false, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';   // v327：不顯示秒，表格才放得進一頁
     const icon = s.icon ? '<img src="' + esc(OMS_SYS_ICON_BASE + encodeURIComponent(s.icon)) + '" alt="" style="width:34px;height:34px;object-fit:contain;border-radius:6px;background:#16233D;padding:2px;vertical-align:middle;">'
                         : '<span style="display:inline-block;width:34px;height:34px;border-radius:6px;border:1px dashed var(--line-soft);vertical-align:middle;" title="還沒有圖標"></span>';
     const urlCell = s.code === 'OMS' ? '<span style="color:var(--text-soft);">（進 OMS 本身）</span>'
-      : s.url ? '<a href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '" style="color:#307FE2;display:inline-block;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;">' + esc(s.url.replace(/^https:\/\//, '')) + '</a>'
+      : s.url ? '<a href="' + esc(s.url) + '" target="_blank" rel="noopener" title="' + esc(s.url) + '" style="color:#307FE2;display:inline-block;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;">' + esc(s.url.replace(/^https:\/\//, '')) + '</a>'
       : '<span style="color:var(--text-soft);">—</span>';
     return '<tr' + (shown ? '' : ' style="background:#F7F8FA;"') + '>' +
       '<td style="white-space:nowrap;text-align:right;width:96px;">' + arrow(s.code, -1, i === 0) + ' ' + arrow(s.code, 1, i === list.length - 1) +
@@ -10848,12 +10878,13 @@ function renderSysListMgmt() {
       '<td style="width:44px;">' + icon + '</td>' +
       '<td style="white-space:nowrap;font-weight:700;">' + esc(s.code) + '</td>' +
       '<td style="white-space:nowrap;">' + esc(s.name) + '</td>' +
-      '<td style="white-space:nowrap;">' + stBadge(s) + (shown ? '<span style="font-size:10px;color:var(--text-soft);margin-left:6px;">第 ' + homeNo + ' 張</span>' : '') +
+      '<td style="white-space:nowrap;">' + stBadge(s) + (shown ? '<div style="font-size:10px;color:var(--text-soft);">第 ' + homeNo + ' 張</div>' : '') +   // v327：第幾張改到第二行，表格才放得進一頁
         (s.status !== 'hidden' && !s.icon ? '<div style="font-size:10px;color:#A82020;">沒有圖標，首頁不會出現</div>' : '') +
         (s.status === 'soon' ? '<div style="font-size:10px;color:var(--text-soft);max-width:220px;white-space:normal;">提示：' + esc(s.soonMsg || (s.code + ' ' + s.name + '即將上線，敬請期待')) + '</div>' : '') + '</td>' +
       '<td>' + urlCell + '</td>' +
-      '<td style="text-align:center;">' + (s.inAccess ? '<span style="color:#1F8A4C;font-weight:700;">✔</span>' : '<span style="color:var(--text-soft);">—</span>') + '</td>' +
-      '<td style="font-size:11px;color:var(--text-soft);white-space:nowrap;">' + esc(when) + (s.updatedBy ? '<div>' + esc(s.updatedBy) + '</div>' : '') + '</td>' +
+      '<td style="text-align:center;padding-left:6px;padding-right:6px;">' + (s.inAccess ? '<span style="color:#1F8A4C;font-weight:700;">✔</span>' : '<span style="color:var(--text-soft);">—</span>') + '</td>' +
+      '<td style="text-align:center;padding-left:6px;padding-right:6px;">' + (s.ssoTicket ? '<span style="color:#1F8A4C;font-weight:700;">✔</span>' : '<span style="color:var(--text-soft);">—</span>') + '</td>' +
+      '<td style="font-size:11px;color:var(--text-soft);white-space:nowrap;">' + esc(when) + (s.updatedBy ? '<div title="' + esc(s.updatedBy) + '">' + esc(String(s.updatedBy).split('@')[0]) + '</div>' : '') + '</td>' +   // v327：修改人只顯示 @ 前面（完整信箱放滑鼠提示），表格才放得進一頁
       '<td style="white-space:nowrap;"><button' + (can ? '' : ' disabled') + ' onclick="hsmStartEdit(\'' + esc(s.code) + '\')" style="font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid var(--line-soft);background:#fff;color:var(--text-main);cursor:' + (can ? 'pointer' : 'default;opacity:.4') + ';">編輯</button></td></tr>';
   }).join('');
   const shownCnt = hubShownSystems().length, accCnt = list.filter(s => s.inAccess).length;
@@ -10862,10 +10893,10 @@ function renderSysListMgmt() {
       '<span style="font-size:14px;font-weight:700;color:var(--text-main);letter-spacing:1px;">系統清單</span>' +
       '<span style="font-size:11px;color:var(--text-soft);">共 ' + list.length + ' 個；首頁顯示 ' + shownCnt + ' 個（每列 4 張）；授權頁勾選欄 ' + accCnt + ' 個</span>' +
       '<button class="btn btn-primary"' + (can && !_hsmEdit ? '' : ' disabled') + ' onclick="hsmStartNew()" style="margin-left:auto;font-size:12px;' + (can && !_hsmEdit ? '' : 'opacity:.5;cursor:not-allowed;') + '">＋ 新增系統</button></div>' +
-    '<table class="users-table"><thead><tr><th style="text-align:right;">順序</th><th>圖標</th><th>代號</th><th>名稱</th><th>首頁</th><th>網址</th><th style="text-align:center;">授權頁</th><th>最後修改</th><th></th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="9" style="padding:16px;text-align:center;color:var(--text-soft);">清單是空的</td></tr>') + '</tbody></table>' +
+    '<table class="users-table"><thead><tr><th style="text-align:right;">順序</th><th>圖標</th><th>代號</th><th>名稱</th><th>首頁</th><th>網址</th><th style="text-align:center;padding-left:6px;padding-right:6px;">授權頁</th><th style="text-align:center;line-height:1.3;padding-left:6px;padding-right:6px;">大廳<br>免打密碼</th><th>最後修改</th><th></th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="10" style="padding:16px;text-align:center;color:var(--text-soft);">清單是空的</td></tr>') + '</tbody></table>' +
     '<div style="margin-top:8px;font-size:11px;color:var(--text-soft);line-height:1.8;">' +
-      '首頁：「上線」點卡片開網址（OMS 是進 OMS 本身）；「即將上線」點卡片跳提示；「不顯示」首頁沒有這張卡。首頁卡片與授權頁勾選欄都照這裡的順序。<br>' +
+      '首頁：「上線」點卡片開網址（OMS 是進 OMS 本身；「大廳免打密碼」打勾的系統，已登入的人點卡片會先發一次性的票再開網址，對方系統換票後不用再打密碼）；「即將上線」點卡片跳提示；「不顯示」首頁沒有這張卡。首頁卡片與授權頁勾選欄都照這裡的順序。<br>' +
       '改了之後，大家下次打開或重新整理首頁就會看到；系統資料授權頁重新打開就會看到新的勾選欄。<br>' +
       '代號建立後不能改、也不能刪（授權紀錄用代號存）；不用了就改成「不顯示」，授權頁的勾選欄也可以拿掉，已經勾過的人資料會保留。<br>' +
       '新系統的圖標請先把圖檔交給 DTO 放上網站，這裡填檔名（例 icon_qms.png）。新系統要自己讀 OMS 授權（勾選的代號）才會擋沒有權限的人。</div>';
@@ -10913,6 +10944,8 @@ function hsmFormHtml() {
         '<img id="hsmIconPrev" src="' + esc(iconSrc) + '" alt="" style="width:40px;height:40px;object-fit:contain;border-radius:6px;background:#16233D;padding:2px;' + (iconSrc ? '' : 'visibility:hidden;') + '" onerror="this.style.visibility=\'hidden\'" onload="this.style.visibility=\'visible\'"></div></div>' +
       '<div>' + lab('即將上線時的提示（空白＝「代號 名稱即將上線，敬請期待」）') + '<input id="hsmSoon" value="' + esc(f.soonMsg) + '" maxlength="60" style="' + inp + 'width:100%;box-sizing:border-box;"></div>' +
       '<div style="display:flex;align-items:flex-end;"><label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding-bottom:7px;"><input type="checkbox" id="hsmAccess"' + (f.inAccess ? ' checked' : '') + '>系統資料授權頁要有這一欄勾選</label></div>' +
+      '<div style="grid-column:1/-1;"><label style="display:inline-flex;align-items:flex-start;gap:6px;font-size:12px;cursor:pointer;line-height:1.6;"><input type="checkbox" id="hsmSso"' + (f.ssoTicket ? ' checked' : '') + ' style="margin-top:3px;">' +
+        '<span>從大廳點進去免打密碼（這個系統已能接收大廳的票）<br><span style="font-size:11px;color:var(--text-soft);">只有該系統已經做好「網址帶 #sso= 就換票」才打開；沒做好就打開，同仁點進去仍要自己登入。</span></span></label></div>' +
     '</div>' +
     '<div id="hsmFormErr" style="color:#A82020;font-size:12px;margin-top:8px;min-height:16px;"></div>' +
     '<div style="display:flex;gap:10px;margin-top:4px;"><button class="btn btn-primary"' + (_hsmBusy ? ' disabled' : '') + ' onclick="hsmSave()" style="font-size:12px;">存檔</button>' +
@@ -10926,7 +10959,7 @@ function hsmIconPreview() {
 }
 function hsmStartNew() {
   if (!hsmCanWrite()) return;
-  _hsmEdit = { isNew: true, code: '', name: '', url: '', icon: '', status: 'hidden', soonMsg: '', inAccess: true };
+  _hsmEdit = { isNew: true, code: '', name: '', url: '', icon: '', status: 'hidden', soonMsg: '', inAccess: true, ssoTicket: false };
   renderSysListMgmt();
   const el = document.getElementById('hsmCode'); if (el) el.focus();
 }
@@ -10950,6 +10983,7 @@ async function hsmSave() {
     status: document.getElementById('hsmStatus').value,
     soonMsg: (document.getElementById('hsmSoon').value || '').trim(),
     inAccess: document.getElementById('hsmAccess').checked,
+    ssoTicket: document.getElementById('hsmSso').checked,   // v327
   };
   if (!f.isNew) v.code = f.code;
   // 跟資料庫同一套規則先檢查一次（資料庫還會再擋一次）
@@ -10969,17 +11003,19 @@ async function hsmSave() {
     lines.push('新增系統 ' + v.code + ' ' + v.name);
     lines.push('首頁：' + OMS_SYS_STATUS[v.status] + (v.status === 'hidden' ? '' : '（排在最後一張）'));
     lines.push('授權頁：' + (v.inAccess ? '多一欄 ' + v.code + ' 勾選' : '不出現'));
+    if (v.ssoTicket) lines.push('從大廳點進去免打密碼：打開');
   } else {
     if (old.name !== v.name) lines.push('名稱：' + old.name + ' → ' + v.name);
     if (old.status !== v.status) lines.push('首頁：' + OMS_SYS_STATUS[old.status] + ' → ' + OMS_SYS_STATUS[v.status]);
     if ((old.url || '') !== v.url) lines.push('網址：' + (old.url || '（空）') + ' → ' + (v.url || '（空）'));
     if ((old.icon || '') !== v.icon) lines.push('圖標：' + (old.icon || '（空）') + ' → ' + (v.icon || '（空）'));
     if ((old.soonMsg || '') !== v.soonMsg) lines.push('即將上線提示：' + (v.soonMsg || '（用預設）'));
+    if (!!old.ssoTicket !== v.ssoTicket) lines.push('從大廳點進去免打密碼：' + (v.ssoTicket ? '打開（大廳會先發票再開網址）' : '關閉（大廳直接開網址）'));
     if (old.inAccess !== v.inAccess) lines.push('授權頁：' + (v.inAccess ? '加回 ' + v.code + ' 勾選欄' : '拿掉 ' + v.code + ' 勾選欄（已經勾過的人資料會保留，只是看不到這欄）'));
     if (!lines.length) { _hsmEdit = null; renderSysListMgmt(); showToast('沒有變更', 'ok'); return; }
   }
   if (!confirm('確定存檔？\n\n' + lines.join('\n') + '\n\n所有人下次打開或重新整理首頁就會看到。')) return;
-  const data = { name: v.name, url: v.url || null, icon: v.icon || null, home_status: v.status, soon_msg: v.soonMsg || null, in_access: v.inAccess };
+  const data = { name: v.name, url: v.url || null, icon: v.icon || null, home_status: v.status, soon_msg: v.soonMsg || null, in_access: v.inAccess, sso_ticket: v.ssoTicket };
   _hsmBusy = true; renderSysListMgmt();
   let werr = '';
   try {
@@ -10994,7 +11030,7 @@ async function hsmSave() {
   _hsmBusy = false;
   await loadOmsSystems();   // 寫完一律讀回資料庫現值，以它為準
   const now = OMS_SYSTEMS.find(s => s.code === v.code);
-  const same = now && now.name === v.name && (now.url || '') === v.url && (now.icon || '') === v.icon && now.status === v.status && (now.soonMsg || '') === v.soonMsg && now.inAccess === v.inAccess;
+  const same = now && now.name === v.name && (now.url || '') === v.url && (now.icon || '') === v.icon && now.status === v.status && (now.soonMsg || '') === v.soonMsg && now.inAccess === v.inAccess && !!now.ssoTicket === v.ssoTicket;
   if (werr) { renderSysListMgmt(); const e2 = document.getElementById('hsmFormErr'); if (e2) e2.textContent = '存檔失敗：' + werr; showToast('存檔失敗：' + werr, 'error'); return; }
   if (_omsSysSource !== 'db') { renderSysListMgmt(); showToast('已送出，但讀不回系統清單，無法確認有沒有存成功：' + _omsSysErr, 'error'); return; }
   if (!same) { renderSysListMgmt(); showToast('存檔沒有成功：資料庫裡的內容跟剛才填的不一樣', 'error'); return; }
