@@ -2793,6 +2793,14 @@
   .pst-tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10.5px; white-space: nowrap; background: #EEF2F8; color: #4B5A70; }
   .pst-tag.out { background: #FFE9C7; color: #8a5200; }
   .pst-tag.in { background: #D8E9FF; color: #1b4f9c; }
+  .pst-tag.note { background: #E3F2E1; color: #2F6B3A; }   /* v330 紀事 */
+  .pst-conc-chg { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-main); margin-top: 6px; flex-wrap: wrap; }
+  .pst-conc-chg input[type=date] { font-size: 11.5px; padding: 2px 6px; }
+  .pst-note-add { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .pst-note-add input, .pst-note-add select { font-size: 11.5px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; }
+  .pst-note-add select { max-width: 150px; }
+  .pst-note-add input[type=text] { flex: 1; min-width: 140px; }
+  a.pst-del { color: var(--rust); cursor: pointer; font-size: 11px; }
   tr.emp-row-visitor td { background: #F4F8FF; }
   /* v328 派駐規則說明 */
   .pr-body { font-size: 13px; color: var(--text-main); line-height: 1.75; }
@@ -5169,7 +5177,7 @@
         <tr><th>欄位</th><th>意思</th><th>例子</th></tr>
         <tr><td class="k">所屬廠區</td><td>人事歸屬的廠區。勞健保、年資算在這裡。</td><td>甲廠</td></tr>
         <tr><td class="k">派駐廠區</td><td>實際被派去工作的廠區。有勾「派駐到其他廠區」才要選，一次只有一個。</td><td>乙廠</td></tr>
-        <tr><td class="k">兼管廠區</td><td>另外兼管的廠區。可以不選，可以選不只一個。</td><td>丙廠</td></tr>
+        <tr><td class="k">兼管廠區</td><td>另外兼管的廠區。可以不選，可以選不只一個。每一段兼管都記開始日、結束日（不知道可以空白）。</td><td>丙廠</td></tr>
         <tr><td class="k">對照工號</td><td>這個人在另一個廠區用的工號。只拿來顯示和查詢，不能用來登入。</td><td>他在乙廠用的工號</td></tr>
       </table>
 
@@ -5201,11 +5209,14 @@
         <tr><td class="k">填或改派駐部門</td><td>所屬廠區的廠區 HR：編輯這個人 → 派駐區塊的「派駐部門」→ 儲存變更。<br>派駐廠區的廠區 HR：在自己廠區的名單上，那個人那一列按「填派駐部門」。</td></tr>
         <tr><td class="k">改派到別的廠區</td><td>編輯這個人 → 按「改派」→ 選新的派駐廠區、新一段開始日，填他在新廠區的派駐部門 → 儲存變更。上一段自動結束，舊的派駐廠區不再顯示這個人。</td></tr>
         <tr><td class="k">調回所屬廠區</td><td>編輯這個人 → 取消勾選「派駐到其他廠區」→ 可以填派駐結束日（不填就是當天）→ 儲存變更。派駐廠區不再顯示這個人，人數算回所屬廠區。</td></tr>
-        <tr><td class="k">兼管其他廠區</td><td>編輯這個人 →「兼管廠區」勾一個或多個 → 儲存變更。可以不勾。</td></tr>
-        <tr><td class="k">離職、轉調</td><td>照原本的流程改員工狀態。派駐會自動結束。</td></tr>
+        <tr><td class="k">兼管其他廠區</td><td>編輯這個人 →「兼管廠區」勾一個或多個，下面填開始日（不知道可以空白）→ 儲存變更。可以不勾。</td></tr>
+        <tr><td class="k">不再兼管</td><td>編輯這個人 → 取消勾選那個兼管廠區，下面填結束日（空白＝當天）→ 儲存變更。</td></tr>
+        <tr><td class="k">記一筆紀事</td><td>編輯這個人 → 歷程下面「加一筆紀事」：日期、跟哪個廠區有關（可以不選）、說明 → 按「加入紀事」就存好。例如「職務晉升：某某執行副總」。紀事不改廠區、不改人數；刪除會留一筆異動紀錄。</td></tr>
+        <tr><td class="k">離職、轉調</td><td>照原本的流程改員工狀態。派駐、兼管都會自動結束。</td></tr>
         <tr><td class="k">留停</td><td>照原本的流程改員工狀態。派駐保留，但不算在職人數。</td></tr>
       </table>
-      <div class="note">・每一次開始、改派、取消，系統都會記進人員異動紀錄和派駐歷程。每一段的派駐廠區、派駐部門、開始日、結束日，在編輯視窗和員工詳細視窗都看得到。<br>
+      <div class="note">・每一次開始、改派、取消派駐，開始、取消兼管，加、刪紀事，系統都會記進人員異動紀錄和歷程。派駐、兼管的每一段（廠區、派駐部門、開始日、結束日）和紀事，照日期排在「派駐、兼管與紀事」表，編輯視窗和員工詳細視窗都看得到。<br>
+      ・開始派駐到正在兼管的廠、或歸屬回正在兼管的廠，那一段兼管會自動結束並記原因。<br>
       ・取消派駐、離職、轉調時，派駐部門會自動清掉，留在派駐歷程裡。<br>
       ・新增員工時不能直接帶派駐，請新增後再編輯。</div>
 
@@ -6008,7 +6019,7 @@
           <div class="modal-field"><div class="modal-field-label">兼管廠區</div><div class="modal-field-value" id="md-concurrentFactories">—</div></div>
           <div class="modal-field"><div class="modal-field-label">對照工號</div><div class="modal-field-value" id="md-crossEmpId">—</div></div>
         </div>
-        <div class="pst-sub">派駐歷程</div>
+        <div class="pst-sub">派駐、兼管與紀事</div>
         <div id="mdPostingHist"></div>
       </div>
     </div>
@@ -6023,7 +6034,14 @@
 // Supabase 設定（v230）
 // ============================================================
 // v293：畫面版號單一出處（出新版 SOP＝cp 檔 → 先改 APP_VER → 才改功能；注入三處＝分頁標題／大廳頂欄右上／登入頁頁腳，比照 QMS/MHR）
-const APP_VER = 'V329';
+const APP_VER = 'V330';
+// v330（261119）：兼管有日期、歷程可以記紀事（設計稿 OMS_派駐廠區_設計_261118.md 第二十一、二十二段；資料庫 SQL 338 要先上）。
+//   起因：用使用者本人當範例試派駐時，他選「甲」——「應該是2020.01.01調回董事長室 兼管富群 觀音 太倉 三個廠區」
+//   「2022.05.01需要在記錄上寫上兼管廠區職務晉升，然後2023.03.01把富群從兼管廠區取消」；方向「可以，照這方向」。
+//   ①兼管：勾選後在下面填開始日、取消勾選在下面填結束日；按「儲存變更」時用資料庫函式 oms_concurrent_set 送（不再走一般存檔）。
+//   ②紀事：編輯視窗歷程下面「加一筆紀事」（日期、廠區可不選、說明），按「加入紀事」就存（oms_career_note_add）；歷程上可以刪（oms_career_note_delete）。
+//   ③派駐、兼管、紀事合成一張「派駐、兼管與紀事」表，照日期排；編輯視窗與員工詳細視窗都看得到。
+//   ④離職、轉調時兼管也自動結束（資料庫保護規則做）；異動紀錄頁認得「修改兼管廠區」「兼管結束」「新增紀事」「刪除紀事」；規則說明頁跟著補。
 // v329（261119）：派駐部門（設計稿 OMS_派駐廠區_設計_261118.md 第十九段⑳㉑；資料庫 SQL 336、337 已先上）。
 //   使用者 261119：「比如在總部是掛在A部門，但在派駐地是掛在B部門，兩個部門名稱不一定會一樣」「可以，照這樣做」「對，兩邊都能填」「可以，開始做」。
 //   ①編輯視窗派駐區塊多「派駐部門」欄（跟派駐一起用 oms_posting_set 送）；派駐歷程多一欄。原本的「部門」欄繼續記所屬廠區的部門。
@@ -6278,9 +6296,9 @@ function sbRowToEmployee(row) {
 function employeeToSbRow(emp, code) {
   const toDate = v => (v && v.trim && v.trim()) ? v.trim() : null;
   // v328：派駐廠區、派駐開始日不從一般存檔送（只能用 oms_posting_set／oms_posting_rehome 改；資料庫保護規則也不採用一般存檔帶來的值）。
-  //   兼管廠區、對照工號走一般存檔，但只有物件上真的有這個欄位才送（Excel 轉入組出來的物件沒有，不能把資料庫現值清掉）。
+  //   對照工號走一般存檔，但只有物件上真的有這個欄位才送（Excel 轉入組出來的物件沒有，不能把資料庫現值清掉）。
+  //   v330：兼管廠區也不從一般存檔送了，改用 oms_concurrent_set（才記得到開始日、結束日）。
   const extra = {};
-  if (Array.isArray(emp.concurrentFactories)) extra.concurrent_factories = emp.concurrentFactories;
   if (typeof emp.crossEmpId === 'string') extra.cross_emp_id = emp.crossEmpId;
   return {
     ...extra,
@@ -6423,7 +6441,12 @@ let guestEmployees = [];        // 派駐進來、兼管本廠的人（所屬廠
 let guestEmployeesErr = '';     // 讀不到的原因（讀不到要顯示「讀不到」，不能當成沒有人）
 let postingHistory = [];        // 派駐歷程（資料庫函式 oms_posting_history_read）
 let postingHistoryErr = '';
-const OMS_POSTING_ACTIONS = ['開始派駐', '改派', '取消派駐', '修改派駐開始日', '修改派駐部門', '派駐結束', '歸屬回原廠區'];   // 資料庫函式寫進異動紀錄的動作名稱（SQL 333；「修改派駐部門」是 SQL 336）
+let concurrentHistory = [];     // v330 兼管歷程（資料庫函式 oms_concurrent_history_read，SQL 338）
+let concurrentHistoryErr = '';
+let careerNotes = [];           // v330 紀事（oms_career_notes_read，SQL 338）
+let careerNotesErr = '';
+const OMS_POSTING_ACTIONS = ['開始派駐', '改派', '取消派駐', '修改派駐開始日', '修改派駐部門', '派駐結束', '歸屬回原廠區',
+                             '修改兼管廠區', '兼管結束', '新增紀事', '刪除紀事'];   // 資料庫函式寫進異動紀錄的動作名稱（SQL 333；「修改派駐部門」是 SQL 336；最後四個是 SQL 338）
 function omsIsActive(e) { return !e.status || e.status === '在職'; }
 function omsFacLabel(code) {
   const c = String(code || '').trim().toUpperCase();
@@ -6474,6 +6497,19 @@ function omsVisitorsOf(code) {
 function omsPostedOutCount(code) { return (employees[code] || []).filter(e => e.postingFactory && omsIsActive(e)).length; }
 function omsPostedInCount(code) { return omsVisitorsOf(code).filter(v => v.kind === 'in' && omsIsActive(v.emp)).length; }
 function omsVisitorIdSet(code) { return new Set(omsVisitorsOf(code).map(v => String(v.emp.empId || '').trim().toUpperCase())); }
+// v330：兼管歷程、紀事、某個兼管廠現在這一段的開始日
+function omsConcurrentHistoryOf(empId) {
+  const id = String(empId || '').trim();
+  return concurrentHistory.filter(h => h.emp_id === id);
+}
+function omsCareerNotesOf(empId) {
+  const id = String(empId || '').trim();
+  return careerNotes.filter(n => n.emp_id === id);
+}
+function omsConcSinceOf(empId, code) {
+  const h = omsConcurrentHistoryOf(empId).find(x => x.factory_code === code && !x.closed_at);
+  return h ? (h.started_on || '') : '';
+}
 function omsPostingHistoryOf(empId) {
   const id = String(empId || '').trim();
   return postingHistory.filter(h => h.emp_id === id)
@@ -6499,6 +6535,21 @@ async function omsLoadPostingHistory() {
   } catch (e) {
     postingHistory = []; postingHistoryErr = (e && e.message) || String(e);
     console.warn('[v328] 讀派駐歷程失敗', e);
+  }
+  // v330：兼管歷程、紀事（讀不到要顯示「讀不到」，不能當成沒有）
+  try {
+    concurrentHistory = await omsRpcAll('oms_concurrent_history_read', 'order=emp_id.asc,created_at.asc');
+    concurrentHistoryErr = '';
+  } catch (e) {
+    concurrentHistory = []; concurrentHistoryErr = (e && e.message) || String(e);
+    console.warn('[v330] 讀兼管歷程失敗', e);
+  }
+  try {
+    careerNotes = await omsRpcAll('oms_career_notes_read', 'order=emp_id.asc,noted_on.asc');
+    careerNotesErr = '';
+  } catch (e) {
+    careerNotes = []; careerNotesErr = (e && e.message) || String(e);
+    console.warn('[v330] 讀紀事失敗', e);
   }
 }
 // 派駐動作（開始派駐／改派／取消／改開始日／歸屬回原廠區）之後：資料庫已經寫好員工表、派駐歷程、異動紀錄，這裡把畫面的資料重讀一次
@@ -7720,7 +7771,7 @@ function omsShowEmpModal(e, code, vis) {
   if (e.postingFactory) set('postingFactory', omsFacLabel(e.postingFactory)); else nonePst('postingFactory', '沒有派駐');
   if (e.postingFactory) set('postingSince', e.postingSince || '（沒填）'); else nonePst('postingSince', '—');
   if (e.postingFactory) set('postingDepartment', e.postingDepartment || '（沒填）'); else nonePst('postingDepartment', '—');   // v329；上面「部門」那一格是原廠區的部門
-  if ((e.concurrentFactories || []).length) set('concurrentFactories', e.concurrentFactories.map(omsFacLabel).join('、')); else nonePst('concurrentFactories', '沒有');
+  if ((e.concurrentFactories || []).length) set('concurrentFactories', e.concurrentFactories.map(c => omsFacLabel(c) + '（自 ' + (omsConcSinceOf(e.empId, c) || '沒填') + '）').join('、')); else nonePst('concurrentFactories', '沒有');   // v330 帶開始日
   if (e.crossEmpId) set('crossEmpId', e.crossEmpId); else nonePst('crossEmpId', '沒有');
   const histEl = document.getElementById('mdPostingHist');
   if (histEl) histEl.innerHTML = omsPostingHistHtml(e.empId);
@@ -9988,6 +10039,7 @@ function omsClearLoadedData() {
   cachedUsersErr = '';   // v326
   facHeadcounts = null;
   guestEmployees = []; guestEmployeesErr = ''; postingHistory = []; postingHistoryErr = '';   // v328
+  concurrentHistory = []; concurrentHistoryErr = ''; careerNotes = []; careerNotesErr = '';     // v330
   _fullEmpLoaded = false;
   currentFactory = null;
   if (typeof omsResetFieldPerms === 'function') omsResetFieldPerms();   // v325-2
@@ -10970,20 +11022,38 @@ const EDIT_FIELDS = [
 //   兼管廠區、對照工號走一般存檔。
 function omsEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function omsToday() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
-let pstEdit = { cur: '', since: '', dept: '', home: '', reassign: false };
-function omsPostingHistHtml(empId) {
-  if (postingHistoryErr) return '<div class="pst-note" style="color:#A02828;">讀不到派駐歷程（' + omsEsc(postingHistoryErr) + '）</div>';
-  const hist = omsPostingHistoryOf(empId);
-  if (!hist.length) return '<div class="pst-note">還沒有派駐紀錄。</div>';
-  return '<table class="pst-hist"><tr><th>派駐廠區</th><th>派駐部門</th><th>當時所屬廠區</th><th>開始日</th><th>結束日</th><th>結束原因</th></tr>' +
-    hist.map(h => '<tr><td>' + omsEsc(omsFacLabel(h.posting_factory)) + '</td><td>' + omsEsc(h.posting_department || '') + '</td><td>' + omsEsc(omsFacLabel(h.home_factory)) + '</td><td>' +
-      omsEsc(h.started_on || '（沒填）') + '</td><td>' + (h.closed_at ? omsEsc(h.ended_on || '') : '<span class="pst-tag out">派駐中</span>') + '</td><td>' +
-      omsEsc(h.end_reason || '') + '</td></tr>').join('') + '</table>';
+let pstEdit = { cur: '', since: '', dept: '', home: '', reassign: false, conc: [], empId: '' };
+// v330：派駐、兼管、紀事合成一張表，照日期排（開始日沒填的，用結束日排；還在進行中的排最後）
+//   opts.canDeleteNote＝紀事那一列多「刪除」（只在編輯視窗）
+function omsPostingHistHtml(empId, opts) {
+  opts = opts || {};
+  const errs = [];
+  if (postingHistoryErr) errs.push('派駐歷程（' + postingHistoryErr + '）');
+  if (concurrentHistoryErr) errs.push('兼管歷程（' + concurrentHistoryErr + '）');
+  if (careerNotesErr) errs.push('紀事（' + careerNotesErr + '）');
+  const rows = [];
+  omsPostingHistoryOf(empId).forEach(h => rows.push({ kind: '派駐', k: 0, fac: h.posting_factory, start: h.started_on || '', end: h.closed_at ? (h.ended_on || '') : null,
+    info: h.posting_department || '', why: h.end_reason || '', home: h.home_factory || '', ts: h.created_at || '' }));
+  omsConcurrentHistoryOf(empId).forEach(h => rows.push({ kind: '兼管', k: 1, fac: h.factory_code, start: h.started_on || '', end: h.closed_at ? (h.ended_on || '') : null,
+    info: '', why: h.end_reason || '', home: h.home_factory || '', ts: h.created_at || '' }));
+  omsCareerNotesOf(empId).forEach(n => rows.push({ kind: '紀事', k: 2, fac: n.factory_code || '', start: n.noted_on || '', end: '', info: n.note || '', why: '', id: n.id, ts: n.created_at || '' }));
+  const key = r => r.start || (r.end === null ? '9999-12-31' : r.end) || '';
+  rows.sort((a, b) => key(a).localeCompare(key(b)) || (a.k - b.k) || String(a.fac).localeCompare(String(b.fac)) || String(a.ts).localeCompare(String(b.ts)));
+  const head = errs.length ? '<div class="pst-note" style="color:#A02828;">⚠ 讀不到' + omsEsc(errs.join('、')) + '，下面可能不完整</div>' : '';
+  if (!rows.length) return head + '<div class="pst-note">還沒有派駐、兼管或紀事。</div>';
+  const tag = r => '<span class="pst-tag' + (r.kind === '派駐' ? ' out' : r.kind === '紀事' ? ' note' : '') + '">' + r.kind + '</span>';
+  return head + '<table class="pst-hist"><tr><th>類別</th><th>廠區</th><th>開始日</th><th>結束日</th><th>部門／說明</th><th>結束原因</th>' + (opts.canDeleteNote ? '<th></th>' : '') + '</tr>' +
+    rows.map(r => '<tr><td>' + tag(r) + '</td><td' + (r.home ? ' title="當時所屬廠區：' + omsEsc(omsFacLabel(r.home)) + '"' : '') + '>' + omsEsc(omsFacLabel(r.fac)) + '</td><td>' +
+      omsEsc(r.kind === '紀事' ? r.start : (r.start || '（沒填）')) + '</td><td>' +
+      (r.kind === '紀事' ? '' : (r.end === null ? '<span class="pst-tag ' + (r.kind === '派駐' ? 'out' : 'in') + '">' + r.kind + '中</span>' : omsEsc(r.end))) + '</td><td>' +
+      omsEsc(r.info) + '</td><td>' + omsEsc(r.why) + '</td>' +
+      (opts.canDeleteNote ? '<td>' + (r.kind === '紀事' ? '<a class="pst-del" onclick="omsNoteDelete(\'' + omsEsc(r.id) + '\')">刪除</a>' : '') + '</td>' : '') +
+      '</tr>').join('') + '</table>';
 }
 function omsEditPostingHtml(code, e) {
   const cur = e.postingFactory || '';
   const conc = e.concurrentFactories || [];
-  pstEdit = { cur: cur, since: e.postingSince || '', dept: e.postingDepartment || '', home: code, reassign: false };
+  pstEdit = { cur: cur, since: e.postingSince || '', dept: e.postingDepartment || '', home: code, reassign: false, conc: conc.slice(), empId: e.empId };
   // 可以派駐過去的廠：不是所屬廠、沒有撤銷（目前的派駐廠就算已撤銷也要列出來，才看得到現況）
   const opts = facSortHome(FACTORIES.filter(f => f.code !== code && (!f.disabled || f.code === cur)));
   const concFacs = facSortHome(FACTORIES.filter(f => f.code !== code && f.code !== cur && (!f.disabled || conc.indexOf(f.code) >= 0)));   // 不列所屬廠區、目前的派駐廠區
@@ -11001,12 +11071,27 @@ function omsEditPostingHtml(code, e) {
       '<div><button type="button" class="btn btn-ghost" id="pstReassignBtn" style="font-size:11px;display:none;" onclick="omsEditPostingReassign()">改派</button></div>' +
     '</div>' +
     '<div class="pst-hint" id="pstHint"></div>' +
-    '<div class="pst-sub">派駐歷程</div>' + omsPostingHistHtml(e.empId) +
     '<div class="pst-sub">兼管廠區</div>' +
-    '<div class="pst-note" style="margin-bottom:4px;">選了之後，這個人會出現在那個廠區的名單上（只能看），不算那個廠區的人數。可以不選。</div>' +
+    '<div class="pst-note" style="margin-bottom:4px;">選了之後，這個人會出現在那個廠區的名單上（只能看），不算那個廠區的人數。可以不選。' +
+      '勾選＝開始兼管、取消勾選＝不再兼管，日期在下面填。</div>' +
+    '<div class="pst-note" style="margin-bottom:6px;color:var(--text-main);">' + (conc.length
+      ? '目前兼管：' + conc.map(c => omsEsc(omsFacLabel(c)) + '（自 ' + omsEsc(omsConcSinceOf(e.empId, c) || '沒填') + '）').join('、')
+      : '目前沒有兼管。') + '</div>' +
     '<div class="pst-conc">' +
-      concFacs.map(f => '<label><input type="checkbox" class="pstConcChk" value="' + omsEsc(f.code) + '"' + (conc.indexOf(f.code) >= 0 ? ' checked' : '') + '>' + omsEsc(f.code + ' - ' + f.name) + '</label>').join('') +
+      concFacs.map(f => '<label><input type="checkbox" class="pstConcChk" value="' + omsEsc(f.code) + '"' + (conc.indexOf(f.code) >= 0 ? ' checked' : '') + ' onchange="omsConcSync()">' + omsEsc(f.code + ' - ' + f.name) + '</label>').join('') +
     '</div>' +
+    '<div id="pstConcDetail"></div>' +
+    '<div class="pst-sub">派駐、兼管與紀事</div>' +
+    '<div id="pstHistBox">' + omsPostingHistHtml(e.empId, { canDeleteNote: true }) + '</div>' +
+    '<div class="pst-note-add">' +
+      '<span class="pst-note" style="color:var(--text-main);">加一筆紀事</span>' +
+      '<input type="date" id="pstNoteOn" title="日期">' +
+      '<select id="pstNoteFac" title="跟哪個廠區有關（可以不選）"><option value="">（不指定廠區）</option>' +
+        facSortHome(FACTORIES.slice()).map(f => '<option value="' + omsEsc(f.code) + '">' + omsEsc(f.code + ' - ' + f.name) + '</option>').join('') + '</select>' +
+      '<input type="text" id="pstNoteText" maxlength="200" placeholder="說明，例如：職務晉升：某某執行副總">' +
+      '<button type="button" class="btn btn-ghost" style="font-size:11px;" onclick="omsNoteAdd()">加入紀事</button>' +
+    '</div>' +
+    '<div class="pst-note">紀事按「加入紀事」就存好，不用再按「儲存變更」；不改廠區、不改人數。</div>' +
   '</div>';
 }
 // 依勾選和「改派」狀態，決定哪些欄位能填、下面的提示寫什麼
@@ -11084,6 +11169,84 @@ function omsEditPostingAction() {
 }
 function omsEditConcurrentValue() {
   return Array.from(document.querySelectorAll('#editPostingBox .pstConcChk:checked')).map(el => el.value);
+}
+// v330：勾選有變的兼管廠，下面列出來填日期（已經填的值保留）
+function omsConcSync() {
+  const box = document.getElementById('pstConcDetail');
+  if (!box) return;
+  const keep = {};
+  box.querySelectorAll('input[data-code]').forEach(el => { keep[el.className + '|' + el.dataset.code] = el.value; });
+  const was = pstEdit.conc || [], now = omsEditConcurrentValue();
+  const rows = [];
+  now.filter(c => was.indexOf(c) < 0).forEach(c => rows.push(
+    '<div class="pst-conc-chg"><span>開始兼管 <b>' + omsEsc(omsFacLabel(c)) + '</b>，開始日</span>' +
+    '<input type="date" class="pstConcSince" data-code="' + omsEsc(c) + '" value="' + omsEsc(keep['pstConcSince|' + c] || '') + '">' +
+    '<span class="pst-note">不知道可以空白</span></div>'));
+  was.filter(c => now.indexOf(c) < 0).forEach(c => rows.push(
+    '<div class="pst-conc-chg"><span>不再兼管 <b>' + omsEsc(omsFacLabel(c)) + '</b>（自 ' + omsEsc(omsConcSinceOf(pstEdit.empId, c) || '沒填') + '），結束日</span>' +
+    '<input type="date" class="pstConcEnd" data-code="' + omsEsc(c) + '" value="' + omsEsc(keep['pstConcEnd|' + c] != null ? keep['pstConcEnd|' + c] : omsToday()) + '">' +
+    '<span class="pst-note">空白＝今天</span></div>'));
+  box.innerHTML = rows.join('');
+}
+// v330：這次存檔兼管要加哪些、取消哪些：{ add: [{factory_code, since}], remove: [{factory_code, ended_on}], error }
+function omsEditConcurrentAction() {
+  const box = document.getElementById('editPostingBox');
+  if (!box || !pstEdit.empId) return { add: [], remove: [] };
+  const was = pstEdit.conc || [], now = omsEditConcurrentValue();
+  const add = [], remove = [];
+  for (const c of now) {
+    if (was.indexOf(c) >= 0) continue;
+    const el = box.querySelector('.pstConcSince[data-code="' + c + '"]');
+    add.push({ factory_code: c, since: ((el && el.value) || '').trim() });
+  }
+  for (const c of was) {
+    if (now.indexOf(c) >= 0) continue;
+    const el = box.querySelector('.pstConcEnd[data-code="' + c + '"]');
+    const ended = ((el && el.value) || '').trim();
+    const since = omsConcSinceOf(pstEdit.empId, c);
+    if (ended && since && ended < since) return { add: [], remove: [], error: '兼管 ' + c + ' 的結束日不能早於開始日（' + since + '）' };
+    remove.push({ factory_code: c, ended_on: ended });
+  }
+  return { add, remove };
+}
+// v330：紀事——加、刪都是按了就存（不等「儲存變更」）
+async function omsRefreshHistAfterNote() {
+  await omsLoadPostingHistory();
+  try { cachedLogs = await loadLogsFromSB(); } catch (e) { console.warn('[v330] 重讀異動紀錄失敗', e); }
+  const b = document.getElementById('pstHistBox');
+  if (b) b.innerHTML = omsPostingHistHtml(pstEdit.empId, { canDeleteNote: true });
+}
+async function omsNoteAdd() {
+  const on = (document.getElementById('pstNoteOn').value || '').trim();
+  const fac = (document.getElementById('pstNoteFac').value || '').trim();
+  const text = (document.getElementById('pstNoteText').value || '').trim();
+  if (!pstEdit.empId) return;
+  if (!on) { showToast('紀事要有日期', 'error'); return; }
+  if (!text) { showToast('紀事要有說明', 'error'); return; }
+  try {
+    await sbRpc('oms_career_note_add', { p: { emp_id: pstEdit.empId, noted_on: on, factory_code: fac, note: text } });
+  } catch (e) {
+    showToast('紀事沒有存成功', 'error');
+    alert('⚠ 紀事沒有存成功，資料沒有變動。\n\n原因：' + ((e && e.message) || e));
+    return;
+  }
+  document.getElementById('pstNoteOn').value = ''; document.getElementById('pstNoteFac').value = ''; document.getElementById('pstNoteText').value = '';
+  await omsRefreshHistAfterNote();
+  showToast('已加入紀事', 'ok');
+}
+async function omsNoteDelete(id) {
+  const n = careerNotes.find(x => String(x.id) === String(id));
+  if (!n) return;
+  if (!confirm('確定刪除這筆紀事？\n\n' + (n.noted_on || '') + (n.factory_code ? ' ' + n.factory_code : '') + ' ' + (n.note || '') + '\n\n刪除後會留一筆異動紀錄（內容會記在紀錄裡）。')) return;
+  try {
+    await sbRpc('oms_career_note_delete', { p: { id: n.id } });
+  } catch (e) {
+    showToast('紀事沒有刪成功', 'error');
+    alert('⚠ 紀事沒有刪成功，資料沒有變動。\n\n原因：' + ((e && e.message) || e));
+    return;
+  }
+  await omsRefreshHistAfterNote();
+  showToast('已刪除紀事', 'ok');
 }
 
 function openEditModal(code, index) {
@@ -11305,15 +11468,9 @@ async function saveEditModal() {
     }
   });
 
-  // v328 兼管廠區（一般存檔；資料庫會自動拿掉所屬廠區、派駐廠區）
-  {
-    const conc0 = (before.concurrentFactories || []).slice().sort();
-    const conc1 = omsEditConcurrentValue().sort();
-    if (conc0.join(',') !== conc1.join(',')) {
-      changes.push({ field: '兼管廠區', key: 'concurrentFactories', old: conc0.join('、'), new: conc1.join('、') });
-      draft.concurrentFactories = conc1;
-    }
-  }
+  // v330 兼管廠區：不走一般存檔，下面用 oms_concurrent_set 送（帶日期；異動紀錄由資料庫記）
+  const cAct = omsEditConcurrentAction();
+  if (cAct.error) { showToast(cAct.error, 'error'); return; }
 
   // 狀態變更
   const newStatus = document.getElementById('editStatusSelect').value;
@@ -11338,13 +11495,28 @@ async function saveEditModal() {
     return;
   }
   const doPosting = pAct.type !== 'none' && !autoEnd;
+  // v330 兼管：離職／轉調時資料庫會自動結束兼管，這裡就不送；不能同時加兼管
+  const concAutoEnd = leaving && (before.concurrentFactories || []).length > 0;
+  if (leaving && cAct.add.length) {
+    showToast('狀態是「' + newStatus + '」不能加兼管，請把新勾的兼管廠區取消', 'error');
+    return;
+  }
+  const pTarget = (pAct.payload && pAct.payload.posting_factory) || '';
+  if (pTarget && cAct.add.some(a => a.factory_code === pTarget)) {
+    showToast('同一個廠區不能同時派駐又兼管（' + pTarget + '）', 'error');
+    return;
+  }
+  const doConc = !leaving && (cAct.add.length + cAct.remove.length) > 0;
 
-  if (changes.length === 0 && !doPosting) {
+  if (changes.length === 0 && !doPosting && !doConc) {
     showToast('沒有變更', 'ok');
     closeEditModal();
     return;
   }
-  if (autoEnd && !confirm(target.name + '（' + target.empId + '）目前派駐在 ' + omsFacLabel(before.postingFactory) + '。\n\n改成「' + newStatus + '」之後，派駐會自動結束，這一段會記進派駐歷程。\n\n確定儲存？')) return;
+  if ((autoEnd || concAutoEnd) && !confirm(target.name + '（' + target.empId + '）目前' +
+      (autoEnd ? '派駐在 ' + omsFacLabel(before.postingFactory) : '') + (autoEnd && concAutoEnd ? '，並且' : '') +
+      (concAutoEnd ? '兼管 ' + before.concurrentFactories.join('、') : '') + '。\n\n改成「' + newStatus + '」之後，' +
+      (autoEnd && concAutoEnd ? '派駐和兼管' : autoEnd ? '派駐' : '兼管') + '會自動結束，記進歷程。\n\n確定儲存？')) return;
 
   // v328 換工號提醒（使用者 261117 定⑫：跳提醒，不擋存檔）
   if (draft.crossEmpId && changes.some(c => c.key === 'crossEmpId')) {
@@ -11365,7 +11537,18 @@ async function saveEditModal() {
     addLogEx(saveCode, target.empId, target.name, actionType, changes);
   }
 
-  // 2) 派駐：一次交易寫員工表＋派駐歷程＋異動紀錄（資料庫函式 oms_posting_set）
+  // 2) v330 兼管：一次交易寫員工表＋兼管歷程＋異動紀錄（資料庫函式 oms_concurrent_set）；先做兼管再做派駐
+  let concDone = '', concErr = '';
+  if (doConc) {
+    try {
+      await sbRpc('oms_concurrent_set', { p: { emp_id: target.empId, add: cAct.add, remove: cAct.remove } });
+      concDone = '兼管已更新';
+    } catch (e) {
+      concErr = (e && e.message) || String(e);
+    }
+  }
+
+  // 3) 派駐：一次交易寫員工表＋派駐歷程＋異動紀錄（資料庫函式 oms_posting_set）
   let postingDone = '', postingErr = '';
   if (doPosting) {
     try {
@@ -11377,14 +11560,22 @@ async function saveEditModal() {
   }
 
   closeEditModal();
-  if (doPosting || autoEnd) await omsReloadAfterPosting();   // 派駐有變：員工、派駐進來的人、歷程、異動紀錄、人數都重讀
+  if (doPosting || autoEnd || doConc || concAutoEnd) await omsReloadAfterPosting();   // 派駐或兼管有變：員工、派駐進來的人、歷程、異動紀錄、人數都重讀
   refreshEmpTable(saveCode);
   renderBuPanel();
-  if (postingErr) {
-    showToast('派駐沒有設定成功', 'error');
-    alert((changes.length ? '一般資料已儲存（' + changes.length + ' 項）。\n\n' : '') + '⚠ 派駐沒有設定成功，派駐相關的資料沒有變動。\n\n原因：' + postingErr);
+  if (postingErr || concErr) {
+    showToast((concErr ? '兼管' : '') + (concErr && postingErr ? '和' : '') + (postingErr ? '派駐' : '') + '沒有設定成功', 'error');
+    alert((changes.length ? '一般資料已儲存（' + changes.length + ' 項）。\n\n' : '') +
+          (concErr ? '⚠ 兼管沒有設定成功，兼管相關的資料沒有變動。\n原因：' + concErr + '\n\n' : (concDone ? '兼管已更新。\n\n' : '')) +
+          (postingErr ? '⚠ 派駐沒有設定成功，派駐相關的資料沒有變動。\n原因：' + postingErr : (postingDone ? '派駐：' + postingDone : '')));
   } else {
-    showToast('已儲存' + (changes.length ? ' ' + changes.length + ' 項變更' : '') + (postingDone ? (changes.length ? '；' : ' ') + postingDone : '') + (autoEnd ? '；派駐已自動結束' : ''), 'ok');
+    const parts = [];
+    if (changes.length) parts.push(changes.length + ' 項變更');
+    if (concDone) parts.push(concDone);
+    if (postingDone) parts.push(postingDone);
+    if (autoEnd) parts.push('派駐已自動結束');
+    if (concAutoEnd) parts.push('兼管已自動結束');
+    showToast('已儲存' + (parts.length ? ' ' + parts.join('；') : ''), 'ok');
   }
   // v321：離職→停用登入帳號
   if (leaveAcc) {
@@ -13546,7 +13737,7 @@ function exportLogCSV() {
   const baseHeaders = ['異動時間','廠區','工號','姓名','異動類型','操作人','狀態','到職日','離職日'];
 
   // 變動前 / 變動後 共用的「會變動」欄位（7 個）
-  const TRACKED_FIELDS = ['公司','廠區','派駐廠區','派駐部門','部門','職稱','集團職級E','職級J','ABCD分類'];   // v329 加「派駐部門」
+  const TRACKED_FIELDS = ['公司','廠區','派駐廠區','派駐部門','兼管廠區','部門','職稱','集團職級E','職級J','ABCD分類'];   // v329 加「派駐部門」；v330 加「兼管廠區」
 
   // === 建立資料矩陣 ===
   // 第 1 列：基本資料標題直接寫在 row1（會與 row2 合併，Excel 保留 row1 的值）
@@ -15441,7 +15632,7 @@ function drawRadar(factories, allEmp, size=200) {
       <option value="修改">修改</option>
       <option value="離職">狀態變更</option>
       <option value="刪除">刪除</option>
-      <option value="__posting">派駐</option>
+      <option value="__posting">派駐、兼管、紀事</option>
     </select>
     <select class="log-filter-select" id="logFilterOperator" onchange="renderLogPage()">
       <option value="">全部操作人</option>
