@@ -1742,7 +1742,7 @@
       border-radius: 4px;
     }
     .brand-logo img {
-      height: 22px;
+      height: 22px !important;   /* v331：圖片標籤寫死 style 36px，不加 !important 蓋不過 */
       width: auto;
       display: block;
     }
@@ -2788,6 +2788,15 @@
   .pst-hist { border-collapse: collapse; width: 100%; font-size: 11.5px; }
   .pst-hist th, .pst-hist td { border-bottom: 1px solid var(--line-soft); padding: 4px 8px; text-align: left; white-space: nowrap; }
   .pst-hist th { color: var(--text-soft); font-weight: 600; }
+  /* v331：手機（600 以下）一筆一張小卡，不撐出左右捲；欄位小標用 data-l，空的欄位不顯示 */
+  @media (max-width: 600px) {
+    .pst-hist, .pst-hist tbody, .pst-hist tr, .pst-hist td { display: block; width: auto; }
+    .pst-hist tr:first-child { display: none; }
+    .pst-hist tr { border-bottom: 1px solid var(--line-soft); padding: 6px 0; }
+    .pst-hist td { display: inline-block; border-bottom: none; padding: 2px 10px 2px 0; white-space: normal; vertical-align: middle; }
+    .pst-hist td:empty { display: none; }
+    .pst-hist td[data-l]::before { content: attr(data-l) '：'; color: var(--text-soft); }
+  }
   .pst-conc { display: flex; flex-wrap: wrap; gap: 4px 14px; }
   .pst-conc label { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--text-main); cursor: pointer; white-space: nowrap; }
   .pst-tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10.5px; white-space: nowrap; background: #EEF2F8; color: #4B5A70; }
@@ -4820,7 +4829,7 @@
     <div class="synchub-brand">
       <!-- v290-1：原本是文字拼的假 LOGO，改用官方向量檔轉出的正式 LOGO（05_syncmold_B.pdf） -->
       <!-- v290-3：左上角只放公司 LOGO（SyncHub 字樣移到中央，不重覆） -->
-      <img class="synchub-brand-logo" src="https://ych1757.github.io/HUB/logo_syncmold.png" alt="syncmold">
+      <img class="synchub-brand-logo" src="https://synchub.syncmold.com.tw/logo_syncmold.png" alt="syncmold">
     </div>
     <div class="synchub-topbar-right">
       <!-- v293：畫面版號（單一出處 APP_VER 注入，出新版只改 APP_VER 一處） -->
@@ -4866,34 +4875,34 @@
     <div class="synchub-grid" id="syncHubGrid">
       <!-- OMS -->
       <div class="synchub-app" onclick="enterOMS()" title="組織主檔系統">
-        <img src="https://ych1757.github.io/HUB/icon_oms.png" class="synchub-app-icon">
+        <img src="https://synchub.syncmold.com.tw/icon_oms.png" class="synchub-app-icon">
       </div>
       <!-- QMS -->
       <div class="synchub-app" onclick="window.open('https://qms.syncmold.com.tw','_blank')" title="品質管理系統">
-        <img src="https://ych1757.github.io/HUB/icon_qms.png" class="synchub-app-icon">
+        <img src="https://synchub.syncmold.com.tw/icon_qms.png" class="synchub-app-icon">
       </div>
       <!-- PMP -->
       <div class="synchub-app" onclick="showSyncHubToast('PMP 專案管理平台即將上線，敬請期待')" title="專案管理平台">
-        <img src="https://ych1757.github.io/HUB/icon_pmp.png" class="synchub-app-icon">
+        <img src="https://synchub.syncmold.com.tw/icon_pmp.png" class="synchub-app-icon">
       </div>
       <!-- CFS -->
       <div class="synchub-app" onclick="showSyncHubToast('CFS 客戶回饋系統即將上線，敬請期待')" title="客戶回饋系統">
-        <img src="https://ych1757.github.io/HUB/icon_cfs.png" class="synchub-app-icon">
+        <img src="https://synchub.syncmold.com.tw/icon_cfs.png" class="synchub-app-icon">
       </div>
       <!-- MHR：v285 已上線，比照 QMS 開自訂網域（MHR 自己走 Auth+can_access_mhr 把關）-->
       <div class="synchub-app" onclick="window.open('https://mhr.syncmold.com.tw','_blank')" title="製造履歷系統">
-        <img src="https://ych1757.github.io/HUB/icon_mhr.png" class="synchub-app-icon">
+        <img src="https://synchub.syncmold.com.tw/icon_mhr.png" class="synchub-app-icon">
       </div>
       <!-- GHG：v286 已上線(V56-5)，比照 QMS/MHR 開自訂網域（v291：260924 DNS 綁定完成改直連，舊 github.io 會 301 過來）-->
       <div class="synchub-app" onclick="window.open('https://ghg.syncmold.com.tw','_blank')" title="溫室氣體盤查系統">
-        <img src="https://ych1757.github.io/HUB/icon_ghg.png" class="synchub-app-icon">
+        <img src="https://synchub.syncmold.com.tw/icon_ghg.png" class="synchub-app-icon">
       </div>
       <!-- v290：SOP／CAPA 新卡片；v292（260924）：兩系統網址到位（jhubservice.ubilink.ai AI-System），比照 QMS/MHR 改 window.open；v320（261110）：資訊部完成網域，改 sop／capa.syncmold.com.tw（該程式依網域直接開對應功能） -->
       <div class="synchub-app" onclick="window.open('https://sop.syncmold.com.tw','_blank')" title="標準作業程序系統">
-        <img src="https://ych1757.github.io/HUB/icon_sop.webp" class="synchub-app-icon">
+        <img src="https://synchub.syncmold.com.tw/icon_sop.webp" class="synchub-app-icon">
       </div>
       <div class="synchub-app" onclick="window.open('https://capa.syncmold.com.tw','_blank')" title="矯正預防措施系統">
-        <img src="https://ych1757.github.io/HUB/icon_capa.webp" class="synchub-app-icon">
+        <img src="https://synchub.syncmold.com.tw/icon_capa.webp" class="synchub-app-icon">
       </div>
     </div>
     <!-- v305：宣導影片區（沒有上架影片時整塊不顯示；不自動播放、沒按播放不抓影片檔） -->
@@ -6034,7 +6043,13 @@
 // Supabase 設定（v230）
 // ============================================================
 // v293：畫面版號單一出處（出新版 SOP＝cp 檔 → 先改 APP_VER → 才改功能；注入三處＝分頁標題／大廳頂欄右上／登入頁頁腳，比照 QMS/MHR）
-const APP_VER = 'V330';
+const APP_VER = 'V331';
+// v331（261120）：手機寬度修兩處，只改畫面（設計稿 OMS_派駐廠區_設計_261118.md 第二十三、二十四段）。
+//   起因：261120 用暫時測試帳號做其他角色實測時，手機寬度（375）下編輯視窗的「派駐、兼管與紀事」表 564 寬，整個視窗內容左右捲；使用者「要，出 V331」。
+//   ①「派駐、兼管與紀事」表、「歸屬回原廠區」搜尋結果表：600 以下改成一筆一張小卡（欄位前加小標，空的欄位不顯示）；桌機不變。
+//   ③寫死的舊網址（個人帳號的 github.io/HUB/） 換成 https://synchub.syncmold.com.tw/（左上角標誌、大廳 8 張圖示、系統圖示共用網址，共 10 處；
+//     主檔 OMS 對話轉件：GitHub 倉庫要搬到組織 syncmold，舊網址會 404；使用者 261120「可以，併進去再上」）。
+//   ②頁首：logo 圖片寫死 36px 高，蓋過手機版的 22px，logo 白框蓋到「OMS」字 → 手機版高度加 !important（V330 以前就有的問題，一起修）。
 // v330（261119）：兼管有日期、歷程可以記紀事（設計稿 OMS_派駐廠區_設計_261118.md 第二十一、二十二段；資料庫 SQL 338 要先上）。
 //   起因：用使用者本人當範例試派駐時，他選「甲」——「應該是2020.01.01調回董事長室 兼管富群 觀音 太倉 三個廠區」
 //   「2022.05.01需要在記錄上寫上兼管廠區職務晉升，然後2023.03.01把富群從兼管廠區取消」；方向「可以，照這方向」。
@@ -11043,10 +11058,10 @@ function omsPostingHistHtml(empId, opts) {
   if (!rows.length) return head + '<div class="pst-note">還沒有派駐、兼管或紀事。</div>';
   const tag = r => '<span class="pst-tag' + (r.kind === '派駐' ? ' out' : r.kind === '紀事' ? ' note' : '') + '">' + r.kind + '</span>';
   return head + '<table class="pst-hist"><tr><th>類別</th><th>廠區</th><th>開始日</th><th>結束日</th><th>部門／說明</th><th>結束原因</th>' + (opts.canDeleteNote ? '<th></th>' : '') + '</tr>' +
-    rows.map(r => '<tr><td>' + tag(r) + '</td><td' + (r.home ? ' title="當時所屬廠區：' + omsEsc(omsFacLabel(r.home)) + '"' : '') + '>' + omsEsc(omsFacLabel(r.fac)) + '</td><td>' +
-      omsEsc(r.kind === '紀事' ? r.start : (r.start || '（沒填）')) + '</td><td>' +
-      (r.kind === '紀事' ? '' : (r.end === null ? '<span class="pst-tag ' + (r.kind === '派駐' ? 'out' : 'in') + '">' + r.kind + '中</span>' : omsEsc(r.end))) + '</td><td>' +
-      omsEsc(r.info) + '</td><td>' + omsEsc(r.why) + '</td>' +
+    rows.map(r => '<tr><td>' + tag(r) + '</td><td' + (r.home ? ' title="當時所屬廠區：' + omsEsc(omsFacLabel(r.home)) + '"' : '') + '>' + omsEsc(omsFacLabel(r.fac)) + '</td><td data-l="' + (r.kind === '紀事' ? '日期' : '開始') + '">' +
+      omsEsc(r.kind === '紀事' ? r.start : (r.start || '（沒填）')) + '</td><td' + (r.kind === '紀事' || r.end === null ? '' : ' data-l="結束"') + '>' +
+      (r.kind === '紀事' ? '' : (r.end === null ? '<span class="pst-tag ' + (r.kind === '派駐' ? 'out' : 'in') + '">' + r.kind + '中</span>' : omsEsc(r.end))) + '</td><td' + (r.kind === '派駐' ? ' data-l="派駐部門"' : '') + '>' +
+      omsEsc(r.info) + '</td><td data-l="結束原因">' + omsEsc(r.why) + '</td>' +
       (opts.canDeleteNote ? '<td>' + (r.kind === '紀事' ? '<a class="pst-del" onclick="omsNoteDelete(\'' + omsEsc(r.id) + '\')">刪除</a>' : '') + '</td>' : '') +
       '</tr>').join('') + '</table>';
 }
@@ -11334,8 +11349,8 @@ function rehomeSearch() {
   box.innerHTML = '<table class="pst-hist"><tr><th>工號</th><th>對照工號</th><th>姓名</th><th>現在建在哪個廠區</th><th>部門</th><th>狀態</th><th></th></tr>' +
     rehomeHits.map((x, i) => {
       const why = rehomeBlockReason(x);
-      return '<tr><td>' + omsEsc(x.emp.empId) + '</td><td>' + omsEsc(x.emp.crossEmpId || '') + '</td><td>' + omsEsc(x.emp.name) + '</td><td>' + omsEsc(omsFacLabel(x.code)) + '</td><td>' +
-        omsEsc(x.emp.department || '') + '</td><td>' + omsEsc(x.emp.status || '在職') + '</td><td>' +
+      return '<tr><td data-l="工號">' + omsEsc(x.emp.empId) + '</td><td data-l="對照工號">' + omsEsc(x.emp.crossEmpId || '') + '</td><td>' + omsEsc(x.emp.name) + '</td><td data-l="現在建在">' + omsEsc(omsFacLabel(x.code)) + '</td><td data-l="部門">' +
+        omsEsc(x.emp.department || '') + '</td><td data-l="狀態">' + omsEsc(x.emp.status || '在職') + '</td><td>' +
         (why ? '<span class="pst-note">不能歸屬：' + omsEsc(why) + '</span>'
              : '<span style="color:var(--gold-deep);cursor:pointer;font-weight:600;" onclick="rehomePick(' + i + ')">選這位</span>') + '</td></tr>';
     }).join('') + '</table>' +
@@ -11750,7 +11765,7 @@ const OMS_SYSTEMS_DEFAULT = [
   { code: 'CAPA', name: '矯正預防措施系統', url: 'https://capa.syncmold.com.tw', icon: 'icon_capa.webp', status: 'live', soonMsg: '', inAccess: true, sort: 80 },
   { code: 'EAM',  name: '企業資產管理系統', url: '', icon: '',               status: 'hidden', soonMsg: '', inAccess: true, sort: 90 },  // v317：EAM 授權欄（EAM 登入查 systems 含 "EAM"，大寫）
 ];
-const OMS_SYS_ICON_BASE = 'https://ych1757.github.io/HUB/';
+const OMS_SYS_ICON_BASE = 'https://synchub.syncmold.com.tw/';   // v331：原本寫死個人帳號的 github.io/HUB/（倉庫搬組織後會 404）
 const OMS_SYS_CACHE_KEY = 'oms_systems_v1';
 const OMS_SYS_STATUS = { live: '上線', soon: '即將上線', hidden: '不顯示' };
 let OMS_SYSTEMS = OMS_SYSTEMS_DEFAULT.map(s => Object.assign({}, s));
