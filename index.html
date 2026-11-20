@@ -6043,7 +6043,11 @@
 // Supabase 設定（v230）
 // ============================================================
 // v293：畫面版號單一出處（出新版 SOP＝cp 檔 → 先改 APP_VER → 才改功能；注入三處＝分頁標題／大廳頂欄右上／登入頁頁腳，比照 QMS/MHR）
-const APP_VER = 'V331';
+const APP_VER = 'V332';
+// v332（261120）：資料表加前綴第二段（網頁部分），只換表名、不改邏輯。
+//   起因：「遷移專案至新帳號」對話 261120 17:24 已把資料表改成新名（舊名留替身檢視，舊版照常能用）；主檔 OMS 對話轉件；使用者 261120「現在開始做」。
+//   程式呼叫 22 處：employees→oms_employees 6、system_access→oms_system_access 7、synchub_profiles→oms_profiles 4、change_log→oms_change_log 3、factories→oms_factories 2。
+//   規劃檔：SyncHUB\SyncHub_資料表加前綴_盤點與規劃_261120.md。
 // v331（261120）：手機寬度修兩處，只改畫面（設計稿 OMS_派駐廠區_設計_261118.md 第二十三、二十四段）。
 //   起因：261120 用暫時測試帳號做其他角色實測時，手機寬度（375）下編輯視窗的「派駐、兼管與紀事」表 564 寬，整個視窗內容左右捲；使用者「要，出 V331」。
 //   ①「派駐、兼管與紀事」表、「歸屬回原廠區」搜尋結果表：600 以下改成一筆一張小卡（欄位前加小標，空的欄位不顯示）；桌機不變。
@@ -6413,7 +6417,7 @@ let cachedLogs = { _global: [] };
 async function loadEmployeesFromSB() {
   // v325-2：非集團系統管理員／集團 HR 改讀函式 oms_employees_read（範圍＋被隱藏的欄位資料庫不送）
   const rows = omsFPUsesFunc() ? await omsRpcAll('oms_employees_read', 'order=factory_code.asc,emp_id.asc')
-                               : await sbSelectAll('employees', 'order=factory_code,emp_id');
+                               : await sbSelectAll('oms_employees', 'order=factory_code,emp_id');
   const result = {};
   for (const row of rows) {
     const code = row.factory_code;
@@ -6576,7 +6580,7 @@ async function omsReloadAfterPosting() {
   try { await omsApplyDemog(); } catch (e) {}
 }
 async function deleteEmpFromSB(empId) {
-  await sbDelete('employees', 'emp_id=eq.' + encodeURIComponent(empId));
+  await sbDelete('oms_employees', 'emp_id=eq.' + encodeURIComponent(empId));
 }
 async function loadUsersFromSB() {
   // v269：帳號名單改讀正本 synchub_profiles 的精簡視圖 oms_roster（舊表 oms_users 已淘汰）
@@ -6594,7 +6598,7 @@ async function deleteUserFromSB(username) {
 async function loadLogsFromSB() {
   // v325-2：非集團系統管理員／集團 HR 改讀函式 oms_change_log_read（範圍＋被隱藏欄位的變更行拿掉）
   const rows = omsFPUsesFunc() ? (await omsRpcAll('oms_change_log_read', 'order=time.desc,id.desc')).slice(0, 2000)
-                               : await sbSelectAll('change_log', 'order=time.desc,id.desc', 2000);  // v295：同秒多筆會撞翻頁邊界，加唯一鍵當第二排序
+                               : await sbSelectAll('oms_change_log', 'order=time.desc,id.desc', 2000);  // v295：同秒多筆會撞翻頁邊界，加唯一鍵當第二排序
   const result = { _global: [] };
   for (const row of rows) {
     const entry = sbRowToLog(row);
@@ -6652,7 +6656,7 @@ async function submitOmsVerify() {
   startTokenAutoRefresh();
   // 用 JWT 讀 synchub_profiles 取得權威角色/廠區，並檢查是否停用
   try {
-    const prof = await sbSelect('synchub_profiles', 'id=eq.' + encodeURIComponent(_omsAuthUser.id));
+    const prof = await sbSelect('oms_profiles', 'id=eq.' + encodeURIComponent(_omsAuthUser.id));
     if (prof && prof[0]) {
       if (prof[0].active === false) {        // 已停用 → 擋下、清掉本次 Auth
         clearAuthSession();
@@ -6814,7 +6818,7 @@ function loadFactories() {
 async function loadFactoriesFromDB() {
   try {
     const [rows, bus] = await Promise.all([
-      sbSelect('factories', 'select=' + FAC_COLS + '&order=sort_order.asc,code.asc'),
+      sbSelect('oms_factories', 'select=' + FAC_COLS + '&order=sort_order.asc,code.asc'),
       sbSelect('oms_business_units', 'select=code,name,color,sort_order,active&order=sort_order.asc,code.asc')]);
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('廠區主檔讀到 0 筆');
     FACTORIES = rows.map(facFromRow);
@@ -8331,7 +8335,7 @@ async function doBatchImport() {
     }
     try {
       batchLogMsg('替換模式：正在清除 Supabase 舊資料...');
-      await sbDelete('employees', 'factory_code=eq.' + encodeURIComponent(code));
+      await sbDelete('oms_employees', 'factory_code=eq.' + encodeURIComponent(code));
       batchLogMsg('✓ 舊資料已清除');
       employees[code] = [];
     } catch(e) {
@@ -8962,17 +8966,17 @@ async function omsUpsertEmployees(rows) {
   //   兼管廠區、對照工號只有物件上有才送（見 employeeToSbRow），所以先照欄位組合分組再送。
   const groups = {};
   rows.forEach(r => { const k = Object.keys(r).sort().join(','); (groups[k] = groups[k] || []).push(r); });
-  for (const k of Object.keys(groups)) await sbUpsert('employees', groups[k], 'emp_id');
+  for (const k of Object.keys(groups)) await sbUpsert('oms_employees', groups[k], 'emp_id');
 }
 async function omsDeleteEmployees(empIds) {
   if (!empIds || !empIds.length) return;
   if (omsFPWriteFunc()) { await sbRpc('oms_employees_delete', { p_emp_ids: empIds }); return; }
-  for (const id of empIds) await sbDelete('employees', 'emp_id=eq.' + encodeURIComponent(id));
+  for (const id of empIds) await sbDelete('oms_employees', 'emp_id=eq.' + encodeURIComponent(id));
 }
 async function omsAddLogRows(rows) {
   if (!rows || !rows.length) return;
   if (omsFPWriteFunc()) { await sbRpc('oms_change_log_add', { p_rows: rows }); return; }
-  await sbUpsert('change_log', rows, '');
+  await sbUpsert('oms_change_log', rows, '');
 }
 
 // ================= 欄位權限設定頁（只有集團系統管理員）=================
@@ -9451,7 +9455,7 @@ async function omsRecheckOwnProfile() {
   if (!_omsJWT || !_omsAuthUser || !_omsAuthUser.id) return;
   let prof = null;
   try {
-    const rows = await sbSelect('synchub_profiles', 'id=eq.' + encodeURIComponent(_omsAuthUser.id));
+    const rows = await sbSelect('oms_profiles', 'id=eq.' + encodeURIComponent(_omsAuthUser.id));
     prof = rows && rows[0];
   } catch (e) { console.warn('[v323-1] 重新整理後核對身分失敗，沿用原身分', e); return; }
   // 只在畫面還停在大廳時處理；已經點進 OMS 的話，進 OMS 時 showMainApp 已即時核對過（v298-2），這裡不把人拉回大廳
@@ -10093,7 +10097,7 @@ async function showMainApp() {
   // （v298-1 根因：首次登入「強制改密」收尾無條件進主畫面，繞過 doLogin 的 no_oms 檢查）
   if (currentUser && _omsJWT && _omsAuthUser && _omsAuthUser.id) {
     try {
-      const rows = await sbSelect('synchub_profiles', 'id=eq.' + encodeURIComponent(_omsAuthUser.id));
+      const rows = await sbSelect('oms_profiles', 'id=eq.' + encodeURIComponent(_omsAuthUser.id));
       if (rows && rows[0]) {
         if (rows[0].active === false) {
           clearAuthSession();
@@ -10257,7 +10261,7 @@ async function doLogin() {
   // 2) 用 JWT 讀 synchub_profiles 拿權威角色/廠區、檢查停用
   let prof = null;
   try {
-    const rows = await sbSelect('synchub_profiles', 'id=eq.' + encodeURIComponent(_omsAuthUser.id));
+    const rows = await sbSelect('oms_profiles', 'id=eq.' + encodeURIComponent(_omsAuthUser.id));
     prof = rows && rows[0];
   } catch (e) { console.warn('讀 synchub_profiles 失敗', e); }
   if (!prof) { clearAuthSession(); errEl.textContent = '找不到帳號設定檔，請洽 DTO'; return; }
@@ -10576,7 +10580,7 @@ async function loadProfileUsers() {
   if (!profileUsersErr) { cachedUsers = profileUsers.map(sbRowToUser); cachedUsersErr = ''; }
   // v298：載入授權名單裡勾了 OMS 的人 → 供「待設定角色」提醒列
   try {
-    const sa = await sbSelectAll('system_access', 'order=factory_code.asc,emp_id.asc');
+    const sa = await sbSelectAll('oms_system_access', 'order=factory_code.asc,emp_id.asc');
     omsCheckedRows = sa.filter(r => {
       const arr = Array.isArray(r.systems) ? r.systems : (typeof r.systems === 'string' ? saSafeParseArr(r.systems) : []);
       return arr.includes('OMS');
@@ -12131,7 +12135,7 @@ async function openSystemAccessPage() {
   document.getElementById('systemAccessBody').innerHTML =
     '<tr><td colspan="' + saColCount() + '" style="padding:20px;text-align:center;color:var(--text-soft);">載入中…</td></tr>';
   try {
-    const rows = await sbSelectAll('system_access', 'order=factory_code.asc,emp_id.asc');
+    const rows = await sbSelectAll('oms_system_access', 'order=factory_code.asc,emp_id.asc');
     systemAccessRows = rows.map(r => ({
       factory_code: r.factory_code || '',
       emp_id: r.emp_id,
@@ -12172,7 +12176,7 @@ async function saLoadLeavers() {
   saLeavers = []; saLeaversErr = '';
   if (saProfilesErr) { saLeaversErr = '帳號清單讀不到（' + saProfilesErr + '）'; return; }
   let emps;
-  try { emps = await sbSelectAll('employees', 'select=emp_id,name,factory_code,status,leave_date&order=emp_id'); }
+  try { emps = await sbSelectAll('oms_employees', 'select=emp_id,name,factory_code,status,leave_date&order=emp_id'); }
   catch (e) { saLeaversErr = '員工主檔讀不到（' + ((e && e.message) || e) + '）'; return; }
   if (!emps.length) { saLeaversErr = '員工主檔讀到 0 筆'; return; }
   const byId = {};
@@ -12191,7 +12195,7 @@ async function saLoadLeavers() {
   const delIds = out.filter(x => x.reason === 'deleted').map(x => x.empId);
   if (delIds.length) {
     try {
-      const logs = await sbSelectAll('change_log', 'emp_id=in.(' + delIds.map(encodeURIComponent).join(',') + ')&action=eq.' + encodeURIComponent('刪除') + '&select=emp_id,factory_code,time,operator&order=time.desc');
+      const logs = await sbSelectAll('oms_change_log', 'emp_id=in.(' + delIds.map(encodeURIComponent).join(',') + ')&action=eq.' + encodeURIComponent('刪除') + '&select=emp_id,factory_code,time,operator&order=time.desc');
       out.forEach(x => {
         if (x.reason !== 'deleted') return;
         const lg = logs.find(l => String(l.emp_id || '').toUpperCase() === String(x.empId).toUpperCase());
@@ -12974,7 +12978,7 @@ async function saBatchConfirm() {
   const btn = document.getElementById('saBatchConfirmBtn');
   btn.disabled = true; const oldTxt = btn.textContent; btn.textContent = '加入中…';
   try {
-    await sbUpsert('system_access', newRows.map(r => ({ ...r, updated_at: new Date().toISOString() })), 'emp_id');
+    await sbUpsert('oms_system_access', newRows.map(r => ({ ...r, updated_at: new Date().toISOString() })), 'emp_id');
     newRows.forEach(r => systemAccessRows.push(r));
     systemAccessRows.sort((a, b) => (a.factory_code || '').localeCompare(b.factory_code || ''));
     // v298：批量加入＝逐一順手開通帳號
@@ -13069,7 +13073,7 @@ async function saAddPerson(empId) {
   if (systemAccessRows.some(x => x.emp_id === empId)) { showToast('此員工已在名單中', 'error'); return; }
   const row = { factory_code: src.code, emp_id: empId, name: src.name, eng_name: src.eng_name, dept: src.dept, title: src.title, email: src.email, systems: [] };
   try {
-    await sbUpsert('system_access', [{ ...row, updated_at: new Date().toISOString() }], 'emp_id');
+    await sbUpsert('oms_system_access', [{ ...row, updated_at: new Date().toISOString() }], 'emp_id');
     systemAccessRows.push(row);
     systemAccessRows.sort((a,b) => (a.factory_code||'').localeCompare(b.factory_code||''));
     // v298：加入名單＝順手開通帳號（初始密碼、角色=信錦員工）
@@ -13093,7 +13097,7 @@ async function saToggleSystem(empId, sysCode, checked) {
   const newSystems = listed.filter(c => set.has(c))
     .concat([...set].filter(c => !listed.includes(c)));
   try {
-    await sbUpsert('system_access', [{ factory_code: row.factory_code, emp_id: row.emp_id, name: row.name, eng_name: row.eng_name, dept: row.dept, title: row.title, email: row.email, systems: newSystems, updated_at: new Date().toISOString() }], 'emp_id');
+    await sbUpsert('oms_system_access', [{ factory_code: row.factory_code, emp_id: row.emp_id, name: row.name, eng_name: row.eng_name, dept: row.dept, title: row.title, email: row.email, systems: newSystems, updated_at: new Date().toISOString() }], 'emp_id');
     row.systems = newSystems;
   } catch (e) {
     console.error('[system_access] toggle failed:', e);
@@ -13107,7 +13111,7 @@ async function saRemovePerson(empId) {
   if (!row) return;
   if (!confirm('確定要將「' + row.name + '」從授權名單移除？')) return;
   try {
-    await sbDelete('system_access', 'emp_id=eq.' + encodeURIComponent(empId));
+    await sbDelete('oms_system_access', 'emp_id=eq.' + encodeURIComponent(empId));
     systemAccessRows = systemAccessRows.filter(x => x.emp_id !== empId);
     renderSystemAccessTable();
     showToast('已移除 ' + row.name, 'ok');
@@ -16440,7 +16444,7 @@ async function facCtrlLoad() {
   fc.loadErr = '';
   try {
     const [rows, roll] = await Promise.all([
-      sbSelect('factories', 'select=*&order=sort_order.asc,code.asc'),
+      sbSelect('oms_factories', 'select=*&order=sort_order.asc,code.asc'),
       sbSelectAll('oms_factory_rollout', 'select=*&order=id.asc')]);
     if (!Array.isArray(rows) || !rows.length) throw new Error('廠區主檔讀到 0 筆');
     fc.rows = rows;
@@ -16449,7 +16453,7 @@ async function facCtrlLoad() {
     fc.loadErr = facErrMsg(e);
   }
   try {
-    const sa = await sbSelectAll('system_access', 'select=emp_id,factory_code&order=emp_id');
+    const sa = await sbSelectAll('oms_system_access', 'select=emp_id,factory_code&order=emp_id');
     fc.access = {};
     sa.forEach(r => { fc.access[r.factory_code] = (fc.access[r.factory_code] || 0) + 1; });
   } catch (e) { fc.access = null; }
