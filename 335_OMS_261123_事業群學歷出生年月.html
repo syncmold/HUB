@@ -6969,6 +6969,14 @@ function omsNormEdu(v, region) {
     const parts = pm[2].split(/[／\/]/).map(_eduKey);
     for (const p of parts) if (EDU_ALIAS_MAP[p]) return EDU_ALIAS_MAP[p];
   }
+  // 「中文 當地語」（空白隔開，例：專科 Cao đẳng、大學 Đại học）：先試第一段，再試後面
+  const sm = raw.match(/^(\S+)\s+(.+)$/);
+  if (sm) {
+    const a = _eduKey(sm[1]), b = _eduKey(sm[2]);
+    if (a === '高職' || a === '高职') return region === 'CN' ? '專科' : '高職';
+    if (EDU_ALIAS_MAP[a]) return EDU_ALIAS_MAP[a];
+    if (EDU_ALIAS_MAP[b]) return EDU_ALIAS_MAP[b];
+  }
   return raw;   // 認不得：原樣存
 }
 
