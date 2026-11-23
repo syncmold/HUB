@@ -6051,7 +6051,8 @@
 // Supabase 設定（v230）
 // ============================================================
 // v293：畫面版號單一出處（出新版 SOP＝cp 檔 → 先改 APP_VER → 才改功能；注入三處＝分頁標題／大廳頂欄右上／登入頁頁腳，比照 QMS/MHR）
-const APP_VER = 'V335';
+const APP_VER = 'V336';
+// v336（261123）：拿掉沒有任何按鈕呼叫的福清預載函式（早期單機版「福清員工清冊一鍵預載」的殘留；預載資料因網頁公開不可內嵌員工資料早已拿掉，函式沒跟著刪）。只刪這一段，其他不變。
 // v335（261123）：公司（事業群）、學歷、出生年月三個欄位跟資料庫 SQL 342 的整理規則一致，之後新增的資料都照這個規則。
 //   ①公司（事業群）一律依所屬廠區的事業群帶出，不讓人手選：新增表單唯讀帶出；編輯視窗加唯讀「公司（事業群）」；
 //     存檔集中在 employeeToSbRow 保證（查得到廠區事業群就用它，查不到才用原值）；Excel 轉入不讀公司欄、完整比對不比公司欄。
@@ -9379,18 +9380,6 @@ function handleExcelUpload(input) {
   };
   reader.readAsArrayBuffer(file);
   input.value = ''; // 允許重複選同檔
-}
-
-function loadPresetFQ() {
-  activeBatchData = FQ_PRESET_DATA;
-  document.getElementById('excelLoadedBar').style.display = 'flex';
-  document.getElementById('excelLoadedInfo').textContent =
-    '✓ FQ 福清富群員工清冊 · 共 ' + FQ_PRESET_DATA.length + ' 筆';
-  document.getElementById('batchTotal').textContent = FQ_PRESET_DATA.length;
-  document.getElementById('batchProgressLabel').textContent =
-    '已解析 ' + FQ_PRESET_DATA.length + ' 筆 · 點擊「開始匯入」';
-  document.getElementById('batchImportBtn').disabled = false;
-  showToast('已載入 FQ 員工清冊 ' + FQ_PRESET_DATA.length + ' 筆', 'ok');
 }
 
 function parseExcelBinary(buffer, fileName) {
