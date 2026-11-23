@@ -2803,6 +2803,11 @@
   .pst-tag.out { background: #FFE9C7; color: #8a5200; }
   .pst-tag.in { background: #D8E9FF; color: #1b4f9c; }
   .pst-tag.note { background: #E3F2E1; color: #2F6B3A; }   /* v330 紀事 */
+  .pst-tag.job { background: #EDE5FA; color: #5B3B98; }    /* v334 職務 */
+  #jobChgBox { margin: 6px 0 10px; padding: 8px 10px; border: 1px solid #D9CCF2; border-radius: 6px; background: #F8F5FE; font-size: 12px; display: none; }
+  #jobChgBox .jc-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #jobChgBox label { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
+  #jobChgBox input[type=date] { font-size: 11.5px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 4px; }
   .pst-conc-chg { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-main); margin-top: 6px; flex-wrap: wrap; }
   .pst-conc-chg input[type=date] { font-size: 11.5px; padding: 2px 6px; }
   .pst-note-add { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
@@ -5221,6 +5226,9 @@
         <tr><td class="k">兼管其他廠區</td><td>編輯這個人 →「兼管廠區」勾一個或多個，下面填開始日（不知道可以空白）→ 儲存變更。可以不勾。</td></tr>
         <tr><td class="k">不再兼管</td><td>編輯這個人 → 取消勾選那個兼管廠區，下面填結束日（空白＝當天）→ 儲存變更。</td></tr>
         <tr><td class="k">記一筆紀事</td><td>編輯這個人 → 歷程下面「加一筆紀事」：日期、跟哪個廠區有關（可以不選）、說明 → 按「加入紀事」就存好。例如「職務晉升：某某執行副總」。紀事不改廠區、不改人數；刪除會留一筆異動紀錄。</td></tr>
+        <tr><td class="k">職稱、職等異動</td><td>編輯這個人 → 直接改職稱或職等 → 下面會出現一列，選這次是「晉升」「調整」還是「更正打錯字」，晉升、調整要填生效日（預設今天）→ 儲存變更。晉升、調整會記進職務歷程；更正打錯字不記，只留在人員異動紀錄。</td></tr>
+        <tr><td class="k">補記過去的職務異動</td><td>編輯這個人 → 歷程下面「補記職務異動」：生效日、晉升或調整、原職稱→新職稱、原職等→新職等、說明 → 按「加入職務異動」就存好。只記進歷程，不改他現在的職稱職等。記錯可以在歷程那一列按「刪除」。</td></tr>
+        <tr><td class="k">Excel 轉入改到職稱職等</td><td>系統自動記一筆「轉入」，生效日空白（Excel 裡沒有生效日），說明寫轉入的日期。新進人員不記。</td></tr>
         <tr><td class="k">離職、轉調</td><td>照原本的流程改員工狀態。派駐、兼管都會自動結束。</td></tr>
         <tr><td class="k">留停</td><td>照原本的流程改員工狀態。派駐保留，但不算在職人數。</td></tr>
       </table>
@@ -6028,7 +6036,7 @@
           <div class="modal-field"><div class="modal-field-label">兼管廠區</div><div class="modal-field-value" id="md-concurrentFactories">—</div></div>
           <div class="modal-field"><div class="modal-field-label">對照工號</div><div class="modal-field-value" id="md-crossEmpId">—</div></div>
         </div>
-        <div class="pst-sub">派駐、兼管與紀事</div>
+        <div class="pst-sub">派駐、兼管、職務與紀事</div>
         <div id="mdPostingHist"></div>
       </div>
     </div>
@@ -6043,7 +6051,15 @@
 // Supabase 設定（v230）
 // ============================================================
 // v293：畫面版號單一出處（出新版 SOP＝cp 檔 → 先改 APP_VER → 才改功能；注入三處＝分頁標題／大廳頂欄右上／登入頁頁腳，比照 QMS/MHR）
-const APP_VER = 'V333';
+const APP_VER = 'V334';
+// v334（261123）：職務異動（職稱／職等）自動記錄（設計稿 OMS_派駐廠區_設計_261118.md 第二十八段；資料庫 SQL 340）。
+//   使用者「B 自動記職務異動」→ 草案七點「可以，照草案」→「可以，做 V334」。
+//   ①編輯視窗改了職稱或職等 → 多一列必填：這次是 晉升／調整／更正打錯字＋生效日（預設今天）。
+//     晉升、調整＝用 oms_job_change_set 一次改員工表＋記職務歷程＋異動紀錄；更正打錯字＝照舊一般存檔，不記職務歷程。
+//   ②歷程表改名「派駐、兼管、職務與紀事」，多一種「職務」；編輯視窗可以刪（oms_job_history_delete）。
+//   ③編輯視窗加「補記職務異動」（oms_job_history_add；只寫歷程，不改目前職稱職等）。
+//   ④Excel 轉入（完整比對、追加／替換）改到職稱或職等 → oms_job_history_import 記「轉入」（生效日空白）。
+//   ⑤規則說明頁補職務異動。
 // v333（261123）：存檔時的資產提醒（設計稿 OMS_派駐廠區_設計_261118.md 第二十六段；使用者「現在開始做」）。
 //   存離職、轉調、留停（狀態改成這三種）、取消派駐、改派成功後，查 EAM 函式 eam_assets_held_count（跟 EAM 261123 約定）：
 //   名下還有資產 → 提醒「名下還有 N 件資產沒轉出」，不擋存檔（已經存好了）；
@@ -6468,6 +6484,8 @@ let postingHistoryErr = '';
 let concurrentHistory = [];     // v330 兼管歷程（資料庫函式 oms_concurrent_history_read，SQL 338）
 let concurrentHistoryErr = '';
 let careerNotes = [];           // v330 紀事（oms_career_notes_read，SQL 338）
+let jobHistory = [];            // v334 職務歷程（oms_job_history_read，SQL 340）
+let jobHistoryErr = '';
 let careerNotesErr = '';
 const OMS_POSTING_ACTIONS = ['開始派駐', '改派', '取消派駐', '修改派駐開始日', '修改派駐部門', '派駐結束', '歸屬回原廠區',
                              '修改兼管廠區', '兼管結束', '新增紀事', '刪除紀事'];   // 資料庫函式寫進異動紀錄的動作名稱（SQL 333；「修改派駐部門」是 SQL 336；最後四個是 SQL 338）
@@ -6526,6 +6544,10 @@ function omsConcurrentHistoryOf(empId) {
   const id = String(empId || '').trim();
   return concurrentHistory.filter(h => h.emp_id === id);
 }
+function omsJobHistoryOf(empId) {   // v334
+  const id = String(empId || '').trim();
+  return jobHistory.filter(h => h.emp_id === id);
+}
 function omsCareerNotesOf(empId) {
   const id = String(empId || '').trim();
   return careerNotes.filter(n => n.emp_id === id);
@@ -6574,6 +6596,13 @@ async function omsLoadPostingHistory() {
   } catch (e) {
     careerNotes = []; careerNotesErr = (e && e.message) || String(e);
     console.warn('[v330] 讀紀事失敗', e);
+  }
+  try {   // v334 職務歷程
+    jobHistory = await omsRpcAll('oms_job_history_read', 'order=emp_id.asc,created_at.asc');
+    jobHistoryErr = '';
+  } catch (e) {
+    jobHistory = []; jobHistoryErr = (e && e.message) || String(e);
+    console.warn('[v334] 讀職務歷程失敗', e);
   }
 }
 // 派駐動作（開始派駐／改派／取消／改開始日／歸屬回原廠區）之後：資料庫已經寫好員工表、派駐歷程、異動紀錄，這裡把畫面的資料重讀一次
@@ -8323,6 +8352,9 @@ async function doBatchImport() {
   (employees[code] || []).forEach(e => { if (e.empId) _existingById[e.empId] = e; });
   const _prevStatus = {};   // v333：原本的狀態（下面匯入時原本那筆物件會被改掉）
   (employees[code] || []).forEach(e => { if (e.empId) _prevStatus[e.empId] = e.status || '在職'; });
+  const _prevJob = {};      // v334：原本的職稱、職等
+  (employees[code] || []).forEach(e => { if (e.empId) _prevJob[e.empId] = { t: (e.title || '').trim(), l: (e.level || '').trim() }; });
+  let _writtenRows = [];    // v334：實際寫進去的資料（追加模式空欄會用現有值補）
 
   document.getElementById('batchImportBtn').disabled = true;
   document.getElementById('batchLog').textContent = '';
@@ -8393,6 +8425,7 @@ async function doBatchImport() {
       const ex = (importMode !== 'replace') ? _existingById[emp.empId] : null;
       return employeeToSbRow(ex ? mergeImportRow(emp, ex) : emp, code);
     });
+    _writtenRows = newRows;   // v334
     const BATCH = 50;
     for (let j = 0; j < newRows.length; j += BATCH) {
       const chunk = newRows.slice(j, j + BATCH);
@@ -8422,6 +8455,16 @@ async function doBatchImport() {
     if (toAsset.length) {
       const at = await omsAssetRemind(toAsset);
       if (at) at.split('\n').filter(Boolean).forEach(l => batchLogMsg(l, 'log-warn'));
+    }
+  }
+  // v334：這次職稱或職等有改的人（跟匯入前比）→ 職務歷程記「轉入」（新進不記）
+  if (sbWriteOk) {
+    const jr = _writtenRows.map(r => { const p = _prevJob[r.emp_id]; if (!p) return null;
+      return { emp_id: r.emp_id, title_old: p.t, title_new: String(r.title || '').trim(), level_old: p.l, level_new: String(r.level || '').trim() }; }).filter(Boolean);
+    if (jr.some(r => r.title_old !== r.title_new || r.level_old !== r.level_new)) {
+      const jt = await omsJobImportRecord(jr);
+      if (jt) batchLogMsg(jt, /^⚠/.test(jt) ? 'log-warn' : 'log-ok');
+      try { await omsLoadPostingHistory(); } catch (e) {}
     }
   }
   document.getElementById('batchProgressLabel').textContent = '匯入完成 ✓ ' + imported + ' / ' + data.length + '（100%）';
@@ -8723,6 +8766,7 @@ async function imApply() {
   });
   // v333：寫入前先記下每筆原本的狀態（下面更新畫面資料時，原本那筆物件會被改掉）
   const imPrevStatus = new Map(upserts.map(u => [u, u.ex ? (u.ex.status || '在職') : null]));
+  const imPrevJob = new Map(upserts.map(u => [u, u.ex ? { t: (u.ex.title || '').trim(), l: (u.ex.level || '').trim() } : null]));   // v334
   // 寫入員工主檔（每 50 筆；某一批失敗就改逐筆，找出是哪幾位）
   const failed = [];
   const okUps = [];
@@ -8817,6 +8861,17 @@ async function imApply() {
       let at = '';
       try { at = await omsAssetReminderText(toAsset); } catch (e) { at = '⚠ 資產件數查不到：' + ((e && e.message) || e); }
       if (at) done += '<div style="color:#9A6A00;margin-top:8px;">' + imEsc(at).replace(/\n/g, '<br>') + '</div>';
+    }
+  }
+  // v334：這次職稱或職等有改的人 → 職務歷程記「轉入」（新進不記）
+  {
+    const jr = okUps.map(u => { const p = imPrevJob.get(u); if (!p) return null;
+      return { emp_id: u.empId, title_old: p.t, title_new: (u.merged.title || '').trim(), level_old: p.l, level_new: (u.merged.level || '').trim() }; }).filter(Boolean);
+    if (jr.some(r => r.title_old !== r.title_new || r.level_old !== r.level_new)) {
+      msg('記職務歷程…');
+      const jt = await omsJobImportRecord(jr);
+      if (jt) done += '<div style="color:' + (/^⚠/.test(jt) ? '#B0453C' : '#5B3B98') + ';margin-top:8px;">' + imEsc(jt) + '</div>';
+      try { await omsLoadPostingHistory(); } catch (e) {}
     }
   }
   S.done = done;
@@ -10090,6 +10145,7 @@ function omsClearLoadedData() {
   facHeadcounts = null;
   guestEmployees = []; guestEmployeesErr = ''; postingHistory = []; postingHistoryErr = '';   // v328
   concurrentHistory = []; concurrentHistoryErr = ''; careerNotes = []; careerNotesErr = '';     // v330
+  jobHistory = []; jobHistoryErr = '';     // v334
   _fullEmpLoaded = false;
   currentFactory = null;
   if (typeof omsResetFieldPerms === 'function') omsResetFieldPerms();   // v325-2
@@ -11075,29 +11131,43 @@ function omsToday() { const d = new Date(); return d.getFullYear() + '-' + Strin
 let pstEdit = { cur: '', since: '', dept: '', home: '', reassign: false, conc: [], empId: '' };
 // v330：派駐、兼管、紀事合成一張表，照日期排（開始日沒填的，用結束日排；還在進行中的排最後）
 //   opts.canDeleteNote＝紀事那一列多「刪除」（只在編輯視窗）
+// v334：一筆職務異動的說明，例：「晉升：職稱 組長→課長、職等 G04→G07」
+function omsJobDesc(h) {
+  const b = v => (v == null || v === '') ? '（空白）' : v;
+  const parts = [];
+  if ((h.title_old || '') !== (h.title_new || '')) parts.push('職稱 ' + b(h.title_old) + '→' + b(h.title_new));
+  if ((h.level_old || '') !== (h.level_new || '')) parts.push('職等 ' + b(h.level_old) + '→' + b(h.level_new));
+  return (h.kind || '') + '：' + parts.join('、') + (h.source === '補記' ? '（補記）' : '') + (h.note ? '（' + h.note + '）' : '');
+}
 function omsPostingHistHtml(empId, opts) {
   opts = opts || {};
   const errs = [];
   if (postingHistoryErr) errs.push('派駐歷程（' + postingHistoryErr + '）');
   if (concurrentHistoryErr) errs.push('兼管歷程（' + concurrentHistoryErr + '）');
   if (careerNotesErr) errs.push('紀事（' + careerNotesErr + '）');
+  if (jobHistoryErr) errs.push('職務歷程（' + jobHistoryErr + '）');   // v334
   const rows = [];
   omsPostingHistoryOf(empId).forEach(h => rows.push({ kind: '派駐', k: 0, fac: h.posting_factory, start: h.started_on || '', end: h.closed_at ? (h.ended_on || '') : null,
     info: h.posting_department || '', why: h.end_reason || '', home: h.home_factory || '', ts: h.created_at || '' }));
   omsConcurrentHistoryOf(empId).forEach(h => rows.push({ kind: '兼管', k: 1, fac: h.factory_code, start: h.started_on || '', end: h.closed_at ? (h.ended_on || '') : null,
     info: '', why: h.end_reason || '', home: h.home_factory || '', ts: h.created_at || '' }));
   omsCareerNotesOf(empId).forEach(n => rows.push({ kind: '紀事', k: 2, fac: n.factory_code || '', start: n.noted_on || '', end: '', info: n.note || '', why: '', id: n.id, ts: n.created_at || '' }));
-  const key = r => r.start || (r.end === null ? '9999-12-31' : r.end) || '';
+  // v334 職務：生效日當日期；Excel 轉入沒有生效日，用轉入那天排序
+  omsJobHistoryOf(empId).forEach(h => rows.push({ kind: '職務', k: 3, fac: h.factory_code || '', start: h.effective_on || '', end: '',
+    info: omsJobDesc(h), why: '', id: h.id, ts: h.created_at || '', sk: h.effective_on || String(h.created_at || '').slice(0, 10) }));
+  const key = r => r.sk || r.start || (r.end === null ? '9999-12-31' : r.end) || '';
   rows.sort((a, b) => key(a).localeCompare(key(b)) || (a.k - b.k) || String(a.fac).localeCompare(String(b.fac)) || String(a.ts).localeCompare(String(b.ts)));
   const head = errs.length ? '<div class="pst-note" style="color:#A02828;">⚠ 讀不到' + omsEsc(errs.join('、')) + '，下面可能不完整</div>' : '';
-  if (!rows.length) return head + '<div class="pst-note">還沒有派駐、兼管或紀事。</div>';
-  const tag = r => '<span class="pst-tag' + (r.kind === '派駐' ? ' out' : r.kind === '紀事' ? ' note' : '') + '">' + r.kind + '</span>';
+  if (!rows.length) return head + '<div class="pst-note">還沒有派駐、兼管、職務異動或紀事。</div>';
+  const tag = r => '<span class="pst-tag' + (r.kind === '派駐' ? ' out' : r.kind === '紀事' ? ' note' : r.kind === '職務' ? ' job' : '') + '">' + r.kind + '</span>';
+  const one = r => r.kind === '紀事' || r.kind === '職務';   // v334：只有一個日期的兩種
   return head + '<table class="pst-hist"><tr><th>類別</th><th>廠區</th><th>開始日</th><th>結束日</th><th>部門／說明</th><th>結束原因</th>' + (opts.canDeleteNote ? '<th></th>' : '') + '</tr>' +
-    rows.map(r => '<tr><td>' + tag(r) + '</td><td' + (r.home ? ' title="當時所屬廠區：' + omsEsc(omsFacLabel(r.home)) + '"' : '') + '>' + omsEsc(omsFacLabel(r.fac)) + '</td><td data-l="' + (r.kind === '紀事' ? '日期' : '開始') + '">' +
-      omsEsc(r.kind === '紀事' ? r.start : (r.start || '（沒填）')) + '</td><td' + (r.kind === '紀事' || r.end === null ? '' : ' data-l="結束"') + '>' +
-      (r.kind === '紀事' ? '' : (r.end === null ? '<span class="pst-tag ' + (r.kind === '派駐' ? 'out' : 'in') + '">' + r.kind + '中</span>' : omsEsc(r.end))) + '</td><td' + (r.kind === '派駐' ? ' data-l="派駐部門"' : '') + '>' +
+    rows.map(r => '<tr><td>' + tag(r) + '</td><td' + (r.home ? ' title="當時所屬廠區：' + omsEsc(omsFacLabel(r.home)) + '"' : '') + '>' + omsEsc(omsFacLabel(r.fac)) + '</td><td data-l="' + (r.kind === '紀事' ? '日期' : r.kind === '職務' ? '生效日' : '開始') + '">' +
+      omsEsc(r.kind === '紀事' ? r.start : r.kind === '職務' ? (r.start || '（沒有）') : (r.start || '（沒填）')) + '</td><td' + (one(r) || r.end === null ? '' : ' data-l="結束"') + '>' +
+      (one(r) ? '' : (r.end === null ? '<span class="pst-tag ' + (r.kind === '派駐' ? 'out' : 'in') + '">' + r.kind + '中</span>' : omsEsc(r.end))) + '</td><td' + (r.kind === '派駐' ? ' data-l="派駐部門"' : '') + '>' +
       omsEsc(r.info) + '</td><td data-l="結束原因">' + omsEsc(r.why) + '</td>' +
-      (opts.canDeleteNote ? '<td>' + (r.kind === '紀事' ? '<a class="pst-del" onclick="omsNoteDelete(\'' + omsEsc(r.id) + '\')">刪除</a>' : '') + '</td>' : '') +
+      (opts.canDeleteNote ? '<td>' + (r.kind === '紀事' ? '<a class="pst-del" onclick="omsNoteDelete(\'' + omsEsc(r.id) + '\')">刪除</a>'
+        : r.kind === '職務' ? '<a class="pst-del" onclick="omsJobDelete(\'' + omsEsc(r.id) + '\')">刪除</a>' : '') + '</td>' : '') +
       '</tr>').join('') + '</table>';
 }
 function omsEditPostingHtml(code, e) {
@@ -11131,7 +11201,7 @@ function omsEditPostingHtml(code, e) {
       concFacs.map(f => '<label><input type="checkbox" class="pstConcChk" value="' + omsEsc(f.code) + '"' + (conc.indexOf(f.code) >= 0 ? ' checked' : '') + ' onchange="omsConcSync()">' + omsEsc(f.code + ' - ' + f.name) + '</label>').join('') +
     '</div>' +
     '<div id="pstConcDetail"></div>' +
-    '<div class="pst-sub">派駐、兼管與紀事</div>' +
+    '<div class="pst-sub">派駐、兼管、職務與紀事</div>' +
     '<div id="pstHistBox">' + omsPostingHistHtml(e.empId, { canDeleteNote: true }) + '</div>' +
     '<div class="pst-note-add">' +
       '<span class="pst-note" style="color:var(--text-main);">加一筆紀事</span>' +
@@ -11142,6 +11212,16 @@ function omsEditPostingHtml(code, e) {
       '<button type="button" class="btn btn-ghost" style="font-size:11px;" onclick="omsNoteAdd()">加入紀事</button>' +
     '</div>' +
     '<div class="pst-note">紀事按「加入紀事」就存好，不用再按「儲存變更」；不改廠區、不改人數。</div>' +
+    '<div class="pst-note-add" id="jobAddRow">' +
+      '<span class="pst-note" style="color:var(--text-main);">補記職務異動</span>' +
+      '<input type="date" id="jobAddOn" title="生效日">' +
+      '<select id="jobAddKind" title="類型"><option value="晉升">晉升</option><option value="調整">調整</option></select>' +
+      '<input type="text" id="jobAddT0" maxlength="100" placeholder="原職稱" style="flex:0 1 90px;min-width:70px;">→<input type="text" id="jobAddT1" maxlength="100" placeholder="新職稱" style="flex:0 1 90px;min-width:70px;">' +
+      '<input type="text" id="jobAddL0" maxlength="100" placeholder="原職等" style="flex:0 1 70px;min-width:60px;">→<input type="text" id="jobAddL1" maxlength="100" placeholder="新職等" style="flex:0 1 70px;min-width:60px;">' +
+      '<input type="text" id="jobAddNote" maxlength="200" placeholder="說明（可以空白）">' +
+      '<button type="button" class="btn btn-ghost" style="font-size:11px;" onclick="omsJobAdd()">加入職務異動</button>' +
+    '</div>' +
+    '<div class="pst-note">補記用在過去的晉升或調整：按「加入職務異動」就存好，只記進歷程，不改他現在的職稱、職等。現在要改職稱職等，請直接改上面的欄位再「儲存變更」。</div>' +
   '</div>';
 }
 // 依勾選和「改派」狀態，決定哪些欄位能填、下面的提示寫什麼
@@ -11299,6 +11379,89 @@ async function omsNoteDelete(id) {
   showToast('已刪除紀事', 'ok');
 }
 
+// ===== v334 職務異動（職稱／職等；SQL 340）=====
+let jobEdit = { title: '', level: '', empId: '' };   // 打開編輯視窗時的職稱、職等（改前值）
+function omsJobSync() {
+  const box = document.getElementById('jobChgBox');
+  if (!box) return;
+  const t = document.getElementById('ef_title'), l = document.getElementById('ef_level');
+  const changed = (t && t.value.trim() !== jobEdit.title) || (l && l.value.trim() !== jobEdit.level);
+  box.style.display = changed ? 'block' : 'none';
+  const kind = (document.querySelector('input[name="jobKind"]:checked') || {}).value || '';
+  const on = document.getElementById('jobChgOn');
+  if (on) on.disabled = (kind === '更正');
+}
+function omsJobBoxHtml() {
+  return '<div class="jc-row"><b>職稱或職等有改，這次是：</b>' +
+    '<label><input type="radio" name="jobKind" value="晉升" onchange="omsJobSync()">晉升</label>' +
+    '<label><input type="radio" name="jobKind" value="調整" onchange="omsJobSync()">調整</label>' +
+    '<label><input type="radio" name="jobKind" value="更正" onchange="omsJobSync()">更正打錯字</label>' +
+    '<span>生效日 <input type="date" id="jobChgOn" value="' + omsToday() + '"></span></div>' +
+    '<div class="pst-note" style="margin-top:4px;">晉升、調整會記進「派駐、兼管、職務與紀事」的職務歷程；更正打錯字不記歷程，只留在人員異動紀錄。</div>';
+}
+// 這次存檔職稱職等要怎麼處理：{ type: 'none'|'fix'|'job', payload, error }
+function omsJobAction(before, draft) {
+  const t0 = (before.title || '').trim(), l0 = (before.level || '').trim();
+  const t1 = (draft.title || '').trim(), l1 = (draft.level || '').trim();
+  if (t0 === t1 && l0 === l1) return { type: 'none' };
+  const kind = (document.querySelector('input[name="jobKind"]:checked') || {}).value || '';
+  if (!kind) return { type: 'none', error: '職稱或職等有改，請在下面選這次是「晉升」「調整」還是「更正打錯字」' };
+  if (kind === '更正') return { type: 'fix' };
+  const on = ((document.getElementById('jobChgOn') || {}).value || '').trim();
+  if (!on) return { type: 'none', error: '晉升、調整要填生效日' };
+  return { type: 'job', payload: { kind: kind, effective_on: on, title_old: t0, title_new: t1, level_old: l0, level_new: l1 } };
+}
+async function omsJobAdd() {
+  if (!pstEdit.empId) return;
+  const g = id => ((document.getElementById(id) || {}).value || '').trim();
+  const p = { emp_id: pstEdit.empId, kind: g('jobAddKind'), effective_on: g('jobAddOn'),
+              title_old: g('jobAddT0'), title_new: g('jobAddT1'), level_old: g('jobAddL0'), level_new: g('jobAddL1'), note: g('jobAddNote') };
+  if (!p.effective_on) { showToast('補記要有生效日', 'error'); return; }
+  if (p.title_old === p.title_new && p.level_old === p.level_new) { showToast('職稱、職等的改前改後都一樣，沒有可以記的', 'error'); return; }
+  try {
+    await sbRpc('oms_job_history_add', { p: p });
+  } catch (e) {
+    showToast('職務異動沒有存成功', 'error');
+    alert('⚠ 職務異動沒有存成功，資料沒有變動。\n\n原因：' + ((e && e.message) || e));
+    return;
+  }
+  ['jobAddOn', 'jobAddT0', 'jobAddT1', 'jobAddL0', 'jobAddL1', 'jobAddNote'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  await omsRefreshHistAfterNote();
+  showToast('已補記職務異動', 'ok');
+}
+async function omsJobDelete(id) {
+  const h = jobHistory.find(x => String(x.id) === String(id));
+  if (!h) return;
+  if (!confirm('確定刪除這筆職務異動？\n\n' + (h.effective_on || '（沒有生效日）') + ' ' + (h.factory_code || '') + ' ' + omsJobDesc(h) +
+      '\n\n只刪歷程，不會改他現在的職稱、職等。刪除後會留一筆異動紀錄（內容會記在紀錄裡）。')) return;
+  try {
+    await sbRpc('oms_job_history_delete', { p: { id: h.id } });
+  } catch (e) {
+    showToast('職務異動沒有刪成功', 'error');
+    alert('⚠ 職務異動沒有刪成功，資料沒有變動。\n\n原因：' + ((e && e.message) || e));
+    return;
+  }
+  await omsRefreshHistAfterNote();
+  showToast('已刪除職務異動', 'ok');
+}
+// Excel 轉入：這次改到職稱、職等的人記「轉入」。rows＝[{emp_id, title_old, title_new, level_old, level_new}]；回傳給畫面看的一句話（沒有就空字串）
+async function omsJobImportRecord(rows) {
+  rows = (rows || []).filter(r => r && r.emp_id && (r.title_old !== r.title_new || r.level_old !== r.level_new));
+  if (!rows.length) return '';
+  try {
+    let added = 0; const skipped = [];
+    for (let i = 0; i < rows.length; i += 1000) {
+      const j = await sbRpc('oms_job_history_import', { p_rows: rows.slice(i, i + 1000) });
+      added += Number((j && j.added) || 0);
+      ((j && j.skipped) || []).forEach(x => skipped.push(x));
+    }
+    return '職務歷程：職稱或職等有改的 ' + rows.length + ' 人，記了 ' + added + ' 筆「轉入」' +
+      (skipped.length ? '；沒記 ' + skipped.length + ' 筆（' + skipped.slice(0, 10).map(x => (x.emp_id || '') + ' ' + (x.why || '')).join('、') + (skipped.length > 10 ? '…' : '') + '）' : '') + '。';
+  } catch (e) {
+    return '⚠ 職務歷程沒有記成功（員工資料已經轉入）：' + String((e && e.message) || e).slice(0, 160);
+  }
+}
+
 function openEditModal(code, index) {
   if (!currentUser) { showToast('請先登入', 'error'); return; }
   // 員工編輯權限：admin（系統管理員）+ group_hr（集團HR）+ hr（限本廠）
@@ -11332,6 +11495,13 @@ function openEditModal(code, index) {
       }
     </div>
   `).join('');
+  // v334：職稱、職等改了就出現「晉升／調整／更正」那一列（放在欄位下面、派駐區塊上面）
+  jobEdit = { title: (e.title || '').trim(), level: (e.level || '').trim(), empId: e.empId };
+  let jb = document.getElementById('jobChgBox');
+  if (!jb) { jb = document.createElement('div'); jb.id = 'jobChgBox'; grid.parentNode.insertBefore(jb, document.getElementById('editPostingBox')); }
+  jb.innerHTML = omsJobBoxHtml();
+  ['ef_title', 'ef_level'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('input', omsJobSync); });
+  omsJobSync();
   // v328：派駐、派駐歷程、兼管廠區
   document.getElementById('editPostingBox').innerHTML = omsEditPostingHtml(code, e);
   omsEditPostingSync();
@@ -11563,6 +11733,15 @@ async function saveEditModal() {
     }
   });
 
+  // v334 職稱、職等：晉升／調整不走一般存檔，下面用 oms_job_change_set 送（一次改員工表＋職務歷程＋異動紀錄）；更正打錯字照舊一般存檔
+  const jAct = omsJobAction(before, draft);
+  if (jAct.error) { showToast(jAct.error, 'error'); return; }
+  if (jAct.type === 'job') {
+    draft.title = before.title; draft.level = before.level;
+    for (let i = changes.length - 1; i >= 0; i--) if (changes[i].key === 'title' || changes[i].key === 'level') changes.splice(i, 1);
+  }
+  const doJob = jAct.type === 'job';
+
   // v330 兼管廠區：不走一般存檔，下面用 oms_concurrent_set 送（帶日期；異動紀錄由資料庫記）
   const cAct = omsEditConcurrentAction();
   if (cAct.error) { showToast(cAct.error, 'error'); return; }
@@ -11603,7 +11782,7 @@ async function saveEditModal() {
   }
   const doConc = !leaving && (cAct.add.length + cAct.remove.length) > 0;
 
-  if (changes.length === 0 && !doPosting && !doConc) {
+  if (changes.length === 0 && !doPosting && !doConc && !doJob) {
     showToast('沒有變更', 'ok');
     closeEditModal();
     return;
@@ -11654,15 +11833,27 @@ async function saveEditModal() {
     }
   }
 
+  // 4) v334 職務異動：一次交易改員工表的職稱職等＋職務歷程＋異動紀錄（資料庫函式 oms_job_change_set）
+  let jobDone = '', jobErr = '';
+  if (doJob) {
+    try {
+      await sbRpc('oms_job_change_set', { p: Object.assign({ emp_id: target.empId }, jAct.payload) });
+      jobDone = '職務異動已記（' + jAct.payload.kind + '）';
+    } catch (e) {
+      jobErr = (e && e.message) || String(e);
+    }
+  }
+
   closeEditModal();
-  if (doPosting || autoEnd || doConc || concAutoEnd) await omsReloadAfterPosting();   // 派駐或兼管有變：員工、派駐進來的人、歷程、異動紀錄、人數都重讀
+  if (doPosting || autoEnd || doConc || concAutoEnd || doJob) await omsReloadAfterPosting();   // 派駐或兼管有變：員工、派駐進來的人、歷程、異動紀錄、人數都重讀
   refreshEmpTable(saveCode);
   renderBuPanel();
-  if (postingErr || concErr) {
-    showToast((concErr ? '兼管' : '') + (concErr && postingErr ? '和' : '') + (postingErr ? '派駐' : '') + '沒有設定成功', 'error');
+  if (postingErr || concErr || jobErr) {
+    showToast([concErr ? '兼管' : '', postingErr ? '派駐' : '', jobErr ? '職務異動' : ''].filter(Boolean).join('、') + '沒有設定成功', 'error');
     alert((changes.length ? '一般資料已儲存（' + changes.length + ' 項）。\n\n' : '') +
           (concErr ? '⚠ 兼管沒有設定成功，兼管相關的資料沒有變動。\n原因：' + concErr + '\n\n' : (concDone ? '兼管已更新。\n\n' : '')) +
-          (postingErr ? '⚠ 派駐沒有設定成功，派駐相關的資料沒有變動。\n原因：' + postingErr : (postingDone ? '派駐：' + postingDone : '')));
+          (postingErr ? '⚠ 派駐沒有設定成功，派駐相關的資料沒有變動。\n原因：' + postingErr + '\n\n' : (postingDone ? '派駐：' + postingDone + '\n\n' : '')) +
+          (jobErr ? '⚠ 職稱、職等沒有改成功，也沒有記職務歷程。\n原因：' + jobErr : (jobDone ? jobDone : '')));
   } else {
     const parts = [];
     if (changes.length) parts.push(changes.length + ' 項變更');
@@ -11670,6 +11861,7 @@ async function saveEditModal() {
     if (postingDone) parts.push(postingDone);
     if (autoEnd) parts.push('派駐已自動結束');
     if (concAutoEnd) parts.push('兼管已自動結束');
+    if (jobDone) parts.push(jobDone);
     showToast('已儲存' + (parts.length ? ' ' + parts.join('；') : ''), 'ok');
   }
   // v321：離職→停用登入帳號
