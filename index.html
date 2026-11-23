@@ -6043,7 +6043,12 @@
 // Supabase 設定（v230）
 // ============================================================
 // v293：畫面版號單一出處（出新版 SOP＝cp 檔 → 先改 APP_VER → 才改功能；注入三處＝分頁標題／大廳頂欄右上／登入頁頁腳，比照 QMS/MHR）
-const APP_VER = 'V332';
+const APP_VER = 'V333';
+// v333（261123）：存檔時的資產提醒（設計稿 OMS_派駐廠區_設計_261118.md 第二十六段；使用者「現在開始做」）。
+//   存離職、轉調、留停（狀態改成這三種）、取消派駐、改派成功後，查 EAM 函式 eam_assets_held_count（跟 EAM 261123 約定）：
+//   名下還有資產 → 提醒「名下還有 N 件資產沒轉出」，不擋存檔（已經存好了）；
+//   函式還不存在（EAM 還沒上線）→ 不提醒；函式在但查詢出錯 → 提醒「資產件數查不到」，不當成 0 件。
+//   三個地方：編輯視窗存檔、完整比對轉入、追加／替換匯入。
 // v332（261120）：資料表加前綴第二段（網頁部分），只換表名、不改邏輯。
 //   起因：「遷移專案至新帳號」對話 261120 17:24 已把資料表改成新名（舊名留替身檢視，舊版照常能用）；主檔 OMS 對話轉件；使用者 261120「現在開始做」。
 //   程式呼叫 22 處：employees→oms_employees 6、system_access→oms_system_access 7、synchub_profiles→oms_profiles 4、change_log→oms_change_log 3、factories→oms_factories 2。
@@ -8316,6 +8321,8 @@ async function doBatchImport() {
   // v272：先記下現有員工(by 工號)，供追加模式合併時用現有值補空欄（須在替換模式清表前擷取）
   const _existingById = {};
   (employees[code] || []).forEach(e => { if (e.empId) _existingById[e.empId] = e; });
+  const _prevStatus = {};   // v333：原本的狀態（下面匯入時原本那筆物件會被改掉）
+  (employees[code] || []).forEach(e => { if (e.empId) _prevStatus[e.empId] = e.status || '在職'; });
 
   document.getElementById('batchImportBtn').disabled = true;
   document.getElementById('batchLog').textContent = '';
@@ -8346,6 +8353,7 @@ async function doBatchImport() {
     if (!employees[code]) employees[code] = [];
   }
   let imported = 0;
+  let sbWriteOk = false;   // v333：寫入成功才查資產件數
 
   // v282：追加模式的「疑似重複」偵測——姓名與現有員工相同但工號不同(可能同名不同人)，事後提示、不擋
   const suspectDup = [];
@@ -8392,6 +8400,7 @@ async function doBatchImport() {
       batchLogMsg('✓ 已寫入 ' + Math.min(j + BATCH, newRows.length) + ' / ' + newRows.length + ' 筆');
     }
     batchLogMsg('✓ Supabase 寫入完成！', 'log-done');
+    sbWriteOk = true;
   } catch(e) {
     batchLogMsg('⚠️ Supabase 寫入失敗：' + e.message, 'log-warn');
   }
@@ -8405,6 +8414,15 @@ async function doBatchImport() {
       suspectDup.slice(0, 20).map(d => '• ' + d.name + '（匯入 ' + d.impId + ' ↔ 既有 ' + d.exist + '）').join('\n') +
       (suspectDup.length > 20 ? '\n…共 ' + suspectDup.length + ' 筆（其餘見下方匯入紀錄）' : '') +
       '\n\n這些人姓名與現有員工相同、但工號不同，已依工號各自建立（未合併）。若其實是同一人，請自行處理。');
+  }
+  // v333：這次改成離職／轉調／留停的人（跟匯入前比）→ 查 EAM 名下資產件數
+  if (sbWriteOk) {
+    const toAsset = data.filter(emp => { const p = _prevStatus[emp.empId]; return p != null && OMS_ASSET_STATUSES.indexOf(emp.status) >= 0 && p !== emp.status; })
+      .map(emp => ({ empId: emp.empId, name: emp.name }));
+    if (toAsset.length) {
+      const at = await omsAssetRemind(toAsset);
+      if (at) at.split('\n').filter(Boolean).forEach(l => batchLogMsg(l, 'log-warn'));
+    }
   }
   document.getElementById('batchProgressLabel').textContent = '匯入完成 ✓ ' + imported + ' / ' + data.length + '（100%）';
   document.getElementById('batchDone').textContent = imported;
@@ -8703,6 +8721,8 @@ async function imApply() {
       notes.push({ emp: e, log: { action: '轉入比對備註', changes: [{ field: '原因', old: '', new: g.note.trim() }, { field: '說明', old: '', new: '狀態不變，請管理員確認' }] } });
     }
   });
+  // v333：寫入前先記下每筆原本的狀態（下面更新畫面資料時，原本那筆物件會被改掉）
+  const imPrevStatus = new Map(upserts.map(u => [u, u.ex ? (u.ex.status || '在職') : null]));
   // 寫入員工主檔（每 50 筆；某一批失敗就改逐筆，找出是哪幾位）
   const failed = [];
   const okUps = [];
@@ -8788,6 +8808,17 @@ async function imApply() {
   if (failed.length) done += '<div style="color:#B0453C;margin-top:8px;">⚠ 有 ' + failed.length + ' 位沒有轉入成功：<br>' + failed.map(f => imEsc(f.empId + ' ' + (f.name || '') + '：' + f.why)).join('<br>') + '</div>';
   if (logErr) done += '<div style="color:#B0453C;margin-top:8px;">⚠ 人員異動紀錄沒寫成功：' + imEsc(logErr) + '</div>';
   if (runErr) done += '<div style="color:#B0453C;margin-top:8px;">⚠ 轉入紀錄沒存到（資料已轉入）：' + imEsc(runErr) + '</div>';
+  // v333：這次改成離職／轉調／留停的人 → 查 EAM 名下資產件數
+  {
+    const toAsset = okUps.filter(u => { const p = imPrevStatus.get(u); return p != null && OMS_ASSET_STATUSES.indexOf(u.merged.status) >= 0 && p !== u.merged.status; })
+      .map(u => ({ empId: u.empId, name: u.merged.name }));
+    if (toAsset.length) {
+      msg('查名下資產件數…');
+      let at = '';
+      try { at = await omsAssetReminderText(toAsset); } catch (e) { at = '⚠ 資產件數查不到：' + ((e && e.message) || e); }
+      if (at) done += '<div style="color:#9A6A00;margin-top:8px;">' + imEsc(at).replace(/\n/g, '<br>') + '</div>';
+    }
+  }
   S.done = done;
   imRender();
   showToast(failed.length ? '轉入完成，但有 ' + failed.length + ' 位沒成功' : '轉入完成', failed.length ? 'error' : undefined);
@@ -11449,6 +11480,51 @@ function closeEditModal() {
   editingEmp = null; editingCode = ''; editingIndex = -1;
 }
 
+// v333：存檔時的資產提醒（EAM 約定 261123：eam_assets_held_count(p_emp_ids text[]) → (emp_id, n)，只回 n>0 的人）
+const OMS_ASSET_STATUSES = ['離職', '轉調', '留停'];
+async function omsAssetsHeld(empIds) {
+  const ids = Array.from(new Set((empIds || []).map(x => String(x || '').trim()).filter(Boolean)));
+  if (!ids.length) return { state: 'ok', map: {} };
+  let rows;
+  try {
+    rows = await sbRpc('eam_assets_held_count', { p_emp_ids: ids });
+  } catch (e) {
+    // 函式還不存在（EAM 還沒上線）→ 不提醒、不當錯誤
+    if (e && (e.status === 404 || e.code === 'PGRST202')) return { state: 'none' };
+    return { state: 'error', msg: (e && e.message) || String(e) };
+  }
+  if (!Array.isArray(rows)) return { state: 'error', msg: '資產件數的回傳格式不對' };
+  const map = {};
+  rows.forEach(r => { const k = String((r && r.emp_id) || '').trim().toUpperCase(); const n = Number(r && r.n) || 0; if (k && n > 0) map[k] = (map[k] || 0) + n; });
+  return { state: 'ok', map };
+}
+// people：[{ empId, name }]；回傳要提醒的文字（不用提醒就回空字串）
+async function omsAssetReminderText(people) {
+  const list = [], seen = {};
+  (people || []).forEach(p => { const k = String((p && p.empId) || '').trim().toUpperCase(); if (k && !seen[k]) { seen[k] = 1; list.push({ k, empId: p.empId, name: p.name || '' }); } });
+  if (!list.length) return '';
+  const res = await omsAssetsHeld(list.map(p => p.empId));
+  const who = p => (p.name ? p.name + '（' + p.empId + '）' : p.empId);
+  const MAX = 30;
+  const more = n => n > MAX ? '\n…共 ' + n + ' 位' : '';
+  if (res.state === 'none') return '';
+  if (res.state === 'error') {
+    return '⚠ 資產件數查不到：' + String(res.msg).slice(0, 200) + '\n\n這次存檔已經完成，但沒辦法確認下面的同仁名下還有沒有資產沒轉出，請到 EAM 查：\n' +
+      list.slice(0, MAX).map(p => '• ' + who(p)).join('\n') + more(list.length);
+  }
+  const hit = list.filter(p => res.map[p.k] > 0);
+  if (!hit.length) return '';
+  return '提醒：下面的同仁名下還有資產沒轉出（EAM 上的保管人還是本人）：\n' +
+    hit.slice(0, MAX).map(p => '• ' + who(p) + '：' + res.map[p.k] + ' 件').join('\n') + more(hit.length) +
+    '\n\n這次存檔已經完成。請通知單位到 EAM 把這些資產轉給接手的人。';
+}
+async function omsAssetRemind(people) {
+  let t = '';
+  try { t = await omsAssetReminderText(people); } catch (e) { t = '⚠ 資產件數查不到：' + ((e && e.message) || e); }
+  if (t) alert(t);
+  return t;
+}
+
 async function saveEditModal() {
   if (!editingEmp || editingIndex < 0) return;
   const list = employees[editingCode];
@@ -11607,6 +11683,10 @@ async function saveEditModal() {
   } else if (leaveAccErr) {
     showToast('已儲存，但讀不到登入帳號名冊（' + leaveAccErr + '），請到「系統資料授權」頁看他的帳號要不要停用', 'error');
   }
+  // v333：存離職／轉調／留停、取消派駐、改派成功 → 查 EAM 名下資產件數，有就提醒（不擋，已經存好了）
+  const assetByStatus = changes.some(c => c.key === 'status') && OMS_ASSET_STATUSES.indexOf(target.status) >= 0;
+  const assetByPosting = !!postingDone && (pAct.type === 'cancel' || pAct.type === 'reassign');
+  if (assetByStatus || assetByPosting) await omsAssetRemind([{ empId: target.empId, name: target.name }]);
 }
 
 // --- 異動紀錄 Modal ---
