@@ -6051,7 +6051,11 @@
 // Supabase 設定（v230）
 // ============================================================
 // v293：畫面版號單一出處（出新版 SOP＝cp 檔 → 先改 APP_VER → 才改功能；注入三處＝分頁標題／大廳頂欄右上／登入頁頁腳，比照 QMS/MHR）
-const APP_VER = 'V337';
+const APP_VER = 'V338';
+// v338（261124）：系統清單管理加「刪除這個系統」（使用者 261124「加刪除功能」；配合 SQL 343）：
+//   編輯表單（OMS 以外、不是新增）多一顆紅色「刪除這個系統」；按了先確認，再請資料庫刪。
+//   資料庫（343）把關：只有管理員刪得動；OMS 不能刪；有人被授權、大廳發過票、廠區開通清單或首頁影片用到的代號擋下並說原因；刪掉的整列記在 oms_systems_deleted。
+//   刪完一律讀回資料庫現值，確認那一列真的不見了才說「已刪除」。
 // v337（261124）：Excel 轉入的出生年月判讀修正（使用者 261124「好」＝補測 Excel 轉入，實測發現）：
 //   ①「19880315」這種 8 碼原樣存進去、「Mar-05」被瀏覽器猜成 2001/03 → 改照 SQL 342 同一套規則（8 碼取年月；Mmm-YY 兩碼年 ≤10 算 20xx、其餘 19xx）；
 //   ②Excel 日期格式的格子改讀日期原始值（不再經「1/1/60」這種兩碼年字串讓瀏覽器猜年份）；
@@ -12400,7 +12404,7 @@ function renderSysListMgmt() {
     '<div style="margin-top:8px;font-size:11px;color:var(--text-soft);line-height:1.8;">' +
       '首頁：「上線」點卡片開網址（OMS 是進 OMS 本身；「大廳免打密碼」打勾的系統，已登入的人點卡片會先發一次性的票再開網址，對方系統換票後不用再打密碼）；「即將上線」點卡片跳提示；「不顯示」首頁沒有這張卡。首頁卡片與授權頁勾選欄都照這裡的順序。<br>' +
       '改了之後，大家下次打開或重新整理首頁就會看到；系統資料授權頁重新打開就會看到新的勾選欄。<br>' +
-      '代號建立後不能改、也不能刪（授權紀錄用代號存）；不用了就改成「不顯示」，授權頁的勾選欄也可以拿掉，已經勾過的人資料會保留。<br>' +
+      '代號建立後不能改（授權紀錄用代號存）。要刪除：按「編輯」→「刪除這個系統」；只有沒被用到的才刪得掉（有人被授權、大廳發過票、廠區開通清單或首頁影片用到的會被擋下並說原因），OMS 本身不能刪。被用到的不用了就改成「不顯示」，授權頁的勾選欄也可以拿掉，已經勾過的人資料會保留。<br>' +   // v338
       '新系統的圖標請先把圖檔交給 DTO 放上網站，這裡填檔名（例 icon_qms.png）。新系統要自己讀 OMS 授權（勾選的代號）才會擋沒有權限的人。</div>';
 }
 // v319-1（使用者 261106「那我怎麼知道是如何排列?」）：清單上方加「首頁預覽」——縮小圖標照首頁一列 4 張排出來，
@@ -12451,7 +12455,10 @@ function hsmFormHtml() {
     '</div>' +
     '<div id="hsmFormErr" style="color:#A82020;font-size:12px;margin-top:8px;min-height:16px;"></div>' +
     '<div style="display:flex;gap:10px;margin-top:4px;"><button class="btn btn-primary"' + (_hsmBusy ? ' disabled' : '') + ' onclick="hsmSave()" style="font-size:12px;">存檔</button>' +
-      '<button class="btn btn-ghost"' + (_hsmBusy ? ' disabled' : '') + ' onclick="hsmCancel()" style="font-size:12px;">取消</button></div></div>';
+      '<button class="btn btn-ghost"' + (_hsmBusy ? ' disabled' : '') + ' onclick="hsmCancel()" style="font-size:12px;">取消</button>' +
+      (!f.isNew && String(f.code || '').toUpperCase() !== 'OMS'   // v338：刪除（資料庫 343 再把關：有被用到就擋）
+        ? '<button' + (_hsmBusy ? ' disabled' : '') + ' onclick="hsmDelete()" style="margin-left:auto;font-size:12px;padding:6px 14px;border-radius:5px;border:1px solid #A82020;background:#fff;color:#A82020;cursor:' + (_hsmBusy ? 'default;opacity:.5' : 'pointer') + ';">刪除這個系統</button>' : '') +
+      '</div></div>';
 }
 function hsmIconPreview() {
   const v = (document.getElementById('hsmIcon').value || '').trim(), img = document.getElementById('hsmIconPrev');
@@ -12538,6 +12545,42 @@ async function hsmSave() {
   if (!same) { renderSysListMgmt(); showToast('存檔沒有成功：資料庫裡的內容跟剛才填的不一樣', 'error'); return; }
   _hsmEdit = null; renderSysListMgmt();
   showToast(v.code + ' ' + v.name + (f.isNew ? ' 已新增' : ' 已存檔'), 'ok');
+}
+// v338：刪除系統（資料庫 343 把關：只有管理員、OMS 不能刪、被用到的擋下並回中文原因；刪掉的整列記在 oms_systems_deleted）
+async function hsmDelete() {
+  if (_hsmBusy || !_hsmEdit || _hsmEdit.isNew) return;
+  if (!currentUser || currentUser.role !== 'admin') { showToast('僅集團系統管理員可使用', 'error'); return; }
+  const code = _hsmEdit.code, s = OMS_SYSTEMS.find(x => x.code === code);
+  if (!s || code === 'OMS') return;
+  if (!confirm('確定刪除系統 ' + code + ' ' + s.name + '？\n\n' +
+    '・系統清單、首頁、授權頁都不會再有這一列。\n' +
+    '・只有沒被用到的才刪得掉；有人被授權、大廳發過票、廠區開通清單或首頁影片用到的，資料庫會擋下並說原因。\n' +
+    '・刪掉的內容會留一筆刪除紀錄，之後要加回來可以照紀錄重新新增。')) return;
+  _hsmBusy = true; renderSysListMgmt();
+  let werr = '', n = -1;
+  try {
+    const res = await sbFetch(SB_URL + '/rest/v1/oms_systems?code=eq.' + encodeURIComponent(code), {
+      method: 'DELETE', headers: sbHdr({ 'Prefer': 'return=representation' }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const r = await res.json();
+    n = Array.isArray(r) ? r.length : -1;
+    if (n === 0) werr = '資料庫沒有刪到（可能沒有刪除權限）';
+  } catch (e) { werr = facErrMsg(e); }
+  _hsmBusy = false;
+  await loadOmsSystems();   // 刪完一律讀回資料庫現值，以它為準
+  const still = OMS_SYSTEMS.some(x => x.code === code);
+  if (werr || _omsSysSource !== 'db' || still) {
+    const msg = werr ? '刪除失敗：' + werr
+      : _omsSysSource !== 'db' ? '已送出，但讀不回系統清單，無法確認有沒有刪掉：' + _omsSysErr
+      : '刪除沒有成功：資料庫裡還有 ' + code;
+    renderSysListMgmt();
+    const e2 = document.getElementById('hsmFormErr'); if (e2) e2.textContent = msg;
+    showToast(msg, 'error');
+    return;
+  }
+  _hsmEdit = null; renderSysListMgmt();
+  showToast(code + ' ' + s.name + ' 已刪除', 'ok');
 }
 // 調順序：跟上一個／下一個交換；順序重新編成 10、20、30…（只改有變的那幾列）
 async function hsmMove(code, dir) {
