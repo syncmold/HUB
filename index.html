@@ -6051,7 +6051,13 @@
 // Supabase 設定（v230）
 // ============================================================
 // v293：畫面版號單一出處（出新版 SOP＝cp 檔 → 先改 APP_VER → 才改功能；注入三處＝分頁標題／大廳頂欄右上／登入頁頁腳，比照 QMS/MHR）
-const APP_VER = 'V336';
+const APP_VER = 'V337';
+// v337（261124）：Excel 轉入的出生年月判讀修正（使用者 261124「好」＝補測 Excel 轉入，實測發現）：
+//   ①「19880315」這種 8 碼原樣存進去、「Mar-05」被瀏覽器猜成 2001/03 → 改照 SQL 342 同一套規則（8 碼取年月；Mmm-YY 兩碼年 ≤10 算 20xx、其餘 19xx）；
+//   ②Excel 日期格式的格子改讀日期原始值（不再經「1/1/60」這種兩碼年字串讓瀏覽器猜年份）；
+//   ③看不懂的出生年月不帶入（追加／比對時保留原值），讀檔時列出工號與原字。
+//   ④（同次實測發現、v282 起就有）「追加」模式已有的人：原資料存的是同一個物件，先被 Excel 值蓋掉才合併，Excel 空白的格子會把部門、職稱等清空 → 改存副本再合併。
+//   ⑤Excel 空白時程式自動填的預設值（狀態「在職」、分類「正職」、備註「Excel匯入·日期」）只給新進的人；已有的人保留原值（追加與完整比對都是）。其他不變。
 // v336（261123）：拿掉沒有任何按鈕呼叫的福清預載函式（早期單機版「福清員工清冊一鍵預載」的殘留；預載資料因網頁公開不可內嵌員工資料早已拿掉，函式沒跟著刪）。只刪這一段，其他不變。
 // v335（261123）：公司（事業群）、學歷、出生年月三個欄位跟資料庫 SQL 342 的整理規則一致，之後新增的資料都照這個規則。
 //   ①公司（事業群）一律依所屬廠區的事業群帶出，不讓人手選：新增表單唯讀帶出；編輯視窗加唯讀「公司（事業群）」；
@@ -7564,14 +7570,37 @@ function fmtDate(val) {
 // 出生資料只保留「年月」（隱私：Excel 可給完整年月日，匯入時自動截掉「日」）
 function birthToYM(val) {
   if (!val) return '';
+  const _ym = (y, mo) => (mo >= 1 && mo <= 12 && +y >= 1900 && +y <= new Date().getFullYear()) ? (y + '/' + String(mo).padStart(2, '0')) : '';   // 年份 1900～今年
+  if (val instanceof Date) return isNaN(val.getTime()) ? '' : _ym(val.getFullYear(), val.getMonth() + 1);
   const s = String(val).trim();
-  // 年在前：1971/10/4、1984-3-24、1971.10、1971/10 …
-  const m = s.match(/(\d{4})[\/\-.](\d{1,2})/);
-  if (m) return m[1] + '/' + m[2].padStart(2, '0');
-  // 退路：交給 Date 解析（如 Excel 日期物件字串）
-  const d = new Date(s);
-  if (!isNaN(d.getTime())) return d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0');
-  return s; // 無法解析就原樣，不擋匯入
+  if (!s) return '';
+  // v337：先用輸入用的嚴格檢查（1999/02、1999-2-15、1999年2月、199902）
+  const st = birthYMStrict(s);
+  if (st) return st;
+  // 年在前：1971/10/4、1984-3-24、1971.10、1971/10 …（後面帶時間也可）
+  let m = s.match(/(\d{4})[\/\-.](\d{1,2})/);
+  if (m && _ym(m[1], +m[2])) return _ym(m[1], +m[2]);
+  // v337：8 碼數字 19880315 → 1988/03（同 SQL 342）
+  m = s.match(/^((?:19|20)\d{2})(\d{2})\d{2}$/);
+  if (m && _ym(m[1], +m[2])) return _ym(m[1], +m[2]);
+  // v337：英文月份＋年，例 Mar-85、Mar-05、March 1985（兩碼年 ≤10 算 20xx、其餘 19xx，同 SQL 342）
+  m = s.match(/^([A-Za-z]{3})[A-Za-z]*[\s\-\/.,]+(\d{2}|\d{4})$/);
+  if (m) {
+    const mi = 'janfebmaraprmayjunjulaugsepoctnovdec'.indexOf(m[1].toLowerCase());
+    if (mi >= 0 && mi % 3 === 0) {
+      const y = m[2].length === 4 ? m[2] : ((+m[2] <= 10 ? '20' : '19') + m[2]);
+      return _ym(y, mi / 3 + 1);
+    }
+  }
+  // v337：日／月／四碼年 或 月／日／四碼年：只有分得出哪個是月（另一個 >12 或兩個相同）才轉，分不出就原樣
+  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.]((?:19|20)\d{2})$/);
+  if (m) {
+    const a = +m[1], b = +m[2];
+    const mo = (a === b) ? a : (a > 12 && b <= 12) ? b : (b > 12 && a <= 12) ? a : 0;
+    if (_ym(m[3], mo)) return _ym(m[3], mo);
+  }
+  // v337：拿掉「交給瀏覽器 Date 解析」的退路（兩碼年會被猜錯，例 Mar-05→2001、1/1/49→2049；各瀏覽器也不一樣）
+  return s; // 無法解析就原樣（顯示用）；Excel 轉入另外擋（parseExcelBinary 不帶入並列出）
 }
 
 // v335：輸入用的嚴格檢查——轉得出「YYYY/MM」就回傳它；空白回 ''；格式不對回 null（新增、編輯存檔用來擋）
@@ -8436,8 +8465,10 @@ function batchLogMsg(msg, cls) {
 function mergeImportRow(imp, existing) {
   if (!existing) return imp;
   const out = Object.assign({}, imp);
+  const auto = imp._auto || {};   // v337：Excel 空白、程式自動填的預設值（狀態在職、分類正職、備註 Excel匯入·日期）→ 已有的人用原值
+  Object.keys(auto).forEach(k => { if (existing[k] != null && String(existing[k]).trim() !== '') out[k] = existing[k]; });
   Object.keys(out).forEach(k => {
-    if (k === '_ts') return;
+    if (k === '_ts' || k === '_auto') return;
     const v = out[k];
     const isEmpty = (v === undefined || v === null || (typeof v === 'string' && v.trim() === ''));
     if (isEmpty && existing[k] !== undefined && existing[k] !== null && String(existing[k]).trim() !== '') {
@@ -8469,7 +8500,7 @@ async function doBatchImport() {
   const data = activeBatchData.filter(r => !_isVis(r));
   // v272：先記下現有員工(by 工號)，供追加模式合併時用現有值補空欄（須在替換模式清表前擷取）
   const _existingById = {};
-  (employees[code] || []).forEach(e => { if (e.empId) _existingById[e.empId] = e; });
+  (employees[code] || []).forEach(e => { if (e.empId) _existingById[e.empId] = Object.assign({}, e); });   // v337：存副本（原本存的是同一個物件，下面的迴圈先把 Excel 值蓋上去，合併時「空欄用原值補」就補不回來，已有的人空白格會被清空）
   const _prevStatus = {};   // v333：原本的狀態（下面匯入時原本那筆物件會被改掉）
   (employees[code] || []).forEach(e => { if (e.empId) _prevStatus[e.empId] = e.status || '在職'; });
   const _prevJob = {};      // v334：原本的職稱、職等
@@ -8479,6 +8510,7 @@ async function doBatchImport() {
   document.getElementById('batchImportBtn').disabled = true;
   document.getElementById('batchLog').textContent = '';
   batchLogMsg('開始匯入 · ' + code + ' · ' + data.length + ' 筆...');
+  if (activeBatchBirthWarn.length) batchLogMsg('⚠ 出生年月看不懂 ' + activeBatchBirthWarn.length + ' 筆，不帶入（原有的保留）：' + activeBatchBirthWarn.join('、'), 'log-warn');   // v337
   if (postedSkip.length) batchLogMsg('派駐人員，略過 ' + postedSkip.length + ' 筆（' + postedSkip.slice(0, 20).map(r => r.empId).join('、') + (postedSkip.length > 20 ? '…' : '') + '）：他們的資料由所屬廠區維護，這裡不新增、不覆蓋', 'log-warn');
 
   // v242: 依選擇的匯入模式執行
@@ -8522,8 +8554,12 @@ async function doBatchImport() {
     // v282：以工號去重——已存在就取代(更新)、不再重複 push；沒有才新增
     const row = Object.assign({ _ts: Date.now() }, data[i]);
     const pos = (employees[code] || []).findIndex(e => e.empId && e.empId === row.empId);
-    if (pos >= 0) employees[code][pos] = Object.assign(employees[code][pos], row);
-    else employees[code].push(row);
+    // v337：畫面上的資料也用合併後的值（空白格、自動預設值不蓋掉原值；跟寫進資料庫的一致）
+    const _exS = _existingById[row.empId];
+    const _mem = (pos >= 0 && _exS) ? mergeImportRow(row, _exS) : row;
+    delete _mem._auto;
+    if (pos >= 0) employees[code][pos] = Object.assign(employees[code][pos], _mem);
+    else employees[code].push(_mem);
     imported++;
     const pct = Math.round((imported / data.length) * 100);
     document.getElementById('batchProgressBar').style.width = pct + '%';
@@ -8610,6 +8646,7 @@ async function doBatchImport() {
 //   每一筆變化寫進人員異動紀錄；每次轉入在 oms_import_runs 留一筆（SQL 325）。月份統計報表以後再做（使用者：資料還不齊全）。
 // ===================================================================================================
 let activeBatchCols = [];        // 這次 Excel 有的欄位（parseExcelBinary 記下）
+let activeBatchBirthWarn = [];   // v337：這次 Excel 出生年月看不懂、沒帶入的（工號「原字」）
 let activeBatchFile = '';
 let imState = null;
 const IM_LABEL = { company: '公司', name: '姓名', supervisor: '直屬主管工號', engName: '英文名', joinDate: '到職日',
@@ -8659,6 +8696,7 @@ async function imOpenCompare() {
     if (!ex) { news.push({ row: r, fromFac: otherFac[id] || '' }); return; }
     const diffs = [];
     cols.forEach(k => {
+      if (r._auto && r._auto[k]) return;     // v337：Excel 空白、程式自動填的預設值＝不覆蓋
       const nv = imNorm(k, r[k]);
       if (!nv) return;                       // Excel 空白＝不覆蓋
       const ov = imNorm(k, ex[k]);
@@ -9483,13 +9521,37 @@ function parseExcelBinary(buffer, fileName) {
     return m[v] || v;
   };
   const parsed = [];
+  // v337：出生欄是 Excel 日期格式的格子 → 讀日期原始值（序號）換年月，不經「1/1/60」這種兩碼年字串
+  let _wsN = null, _rng = null;
+  try {
+    _wsN = XLSX.read(buffer, { type: 'array', cellDates: false, cellNF: true }).Sheets[usedSheet];
+    _rng = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  } catch (e) { _wsN = null; }
+  const birthCellYM = i => {
+    if (idx.birth < 0 || !_wsN || !_rng) return '';
+    const cell = _wsN[XLSX.utils.encode_cell({ r: _rng.s.r + i, c: _rng.s.c + idx.birth })];
+    if (!cell || cell.t !== 'n' || !cell.z || !XLSX.SSF.is_date(cell.z)) return '';
+    const p = XLSX.SSF.parse_date_code(cell.v);
+    return (p && p.y >= 1900 && p.y <= new Date().getFullYear() && p.m >= 1 && p.m <= 12) ? (p.y + '/' + String(p.m).padStart(2, '0')) : '';
+  };
+  const _birthWarn = [];   // v337：看不懂的出生年月（工號「原字」）
 
   for (let i = hRow + 1; i < allRows.length; i++) {
     const row = allRows[i];
     const name  = get(row, idx.name);
     const empId = get(row, idx.empId);
     if (!name || !empId) continue;
+    // v337：出生年月＝日期格子讀原始值，其他照文字判讀；判讀不出 YYYY/MM 的不帶入（追加／比對時保留原值）並列出
+    const _bRaw = get(row, idx.birth);
+    let _bYM = birthCellYM(i) || birthToYM(_bRaw);
+    if (_bRaw && !(_bYM && birthYMStrict(_bYM) === _bYM)) { _birthWarn.push(empId + '「' + _bRaw + '」'); _bYM = ''; }   // 要是 YYYY/MM、年份 1900～今年
+    // v337：Excel 空白、下面由程式自動填預設值的欄位記在 _auto（已有的人轉入時用原值，不用預設值蓋掉）
+    const _auto = {};
+    if (!normalizeStatus(get(row,idx.status))) _auto.status = 1;
+    if (!normalizeCategory(get(row,idx.category))) _auto.category = 1;
+    if (!get(row,idx.remark)) _auto.remark = 1;
     parsed.push({
+      _auto,
       company: _impGroup, factory: get(row,idx.factory),   // v335：公司＝匯入廠區的事業群，不讀 Excel 公司欄
       name, empId,
       supervisor: get(row,idx.supervisor), engName: get(row,idx.engName),
@@ -9501,7 +9563,7 @@ function parseExcelBinary(buffer, fileName) {
       expense:  (get(row,idx.expense)||'').trim().toUpperCase() || '',
       account:  normalizeAccount(get(row,idx.account)),
       gender:   normalizeGender(get(row,idx.gender)),
-      birth:    birthToYM(get(row,idx.birth)),
+      birth:    _bYM,   // v337
       leaveDate: get(row,idx.leaveDate),
       education: normalizeEducation(get(row,idx.education)),
       remark: get(row,idx.remark) || ('Excel匯入·' + new Date().toISOString().slice(0,10)),
@@ -9512,9 +9574,12 @@ function parseExcelBinary(buffer, fileName) {
 
   activeBatchData = parsed;
   activeBatchCols = _cols325; activeBatchFile = fileName || '';   // v325
+  activeBatchBirthWarn = _birthWarn;   // v337
   document.getElementById('excelLoadedBar').style.display = 'flex';
   document.getElementById('excelLoadedInfo').textContent =
-    '✓ 已讀取「' + fileName + '」· 工作表：' + usedSheet + ' · 共 ' + parsed.length + ' 筆';
+    '✓ 已讀取「' + fileName + '」· 工作表：' + usedSheet + ' · 共 ' + parsed.length + ' 筆' +
+    (_birthWarn.length ? ' · ⚠ 出生年月看不懂 ' + _birthWarn.length + ' 筆，這幾筆不帶入出生年月（原有的保留）：' + _birthWarn.slice(0, 10).join('、') + (_birthWarn.length > 10 ? '…' : '') : '');
+  if (_birthWarn.length) showToast('出生年月看不懂 ' + _birthWarn.length + ' 筆，不帶入（見檔名旁說明）', 'error');
   document.getElementById('batchTotal').textContent = parsed.length;
   document.getElementById('batchProgressLabel').textContent = '已解析 ' + parsed.length + ' 筆 · 點擊「開始匯入」';
   document.getElementById('batchImportBtn').disabled = false;
@@ -9523,6 +9588,7 @@ function parseExcelBinary(buffer, fileName) {
 function clearExcelData() {
   activeBatchData = null;
   activeBatchCols = []; activeBatchFile = '';   // v325
+  activeBatchBirthWarn = [];   // v337
   document.getElementById('excelLoadedBar').style.display = 'none';
   document.getElementById('excelLoadedInfo').textContent = '—';
   if (currentFactory) refreshBatchPanel(currentFactory.code);
