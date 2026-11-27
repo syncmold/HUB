@@ -6051,7 +6051,11 @@
 // Supabase 設定（v230）
 // ============================================================
 // v293：畫面版號單一出處（出新版 SOP＝cp 檔 → 先改 APP_VER → 才改功能；注入三處＝分頁標題／大廳頂欄右上／登入頁頁腳，比照 QMS/MHR）
-const APP_VER = 'V338';
+const APP_VER = 'V339';
+// v339（261127）：Excel 轉入認得「SyncHub 系統權限申請表」的「人員主檔資料」分頁（使用者 261127 回報：分頁名稱認不出；8 人匯入變 10 筆）：
+//   ①選分頁：先找名稱含 員工清冊／人員清冊／員工名冊／人員主檔 的分頁，再找前 10 列有「姓名＋工號」標題列的分頁，都沒有才用第一個分頁
+//     （原本只認前三種名稱，申請表第一個分頁「申請單」是直式欄位，找不到標題列）；
+//   ②跳過申請表的「必填／選填」說明列與「範例」列（原本姓名、工號有字就當成員工轉入，所以多 2 筆）；跳過幾列在完成畫面列出。
 // v338（261124）：系統清單管理加「刪除這個系統」（使用者 261124「加刪除功能」；配合 SQL 343）：
 //   編輯表單（OMS 以外、不是新增）多一顆紅色「刪除這個系統」；按了先確認，再請資料庫刪。
 //   資料庫（343）把關：只有管理員刪得動；OMS 不能刪；有人被授權、大廳發過票、廠區開通清單或首頁影片用到的代號擋下並說原因；刪掉的整列記在 oms_systems_deleted。
@@ -9430,8 +9434,15 @@ function parseExcelBinary(buffer, fileName) {
 
   const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
 
-  const prefer = ['員工清冊','人員清冊','員工名冊'];
-  let usedSheet = wb.SheetNames.find(n => prefer.some(p => n.includes(p))) || wb.SheetNames[0];
+  // v339：多認「人員主檔」（權限申請表）；名稱都對不上時，改找前 10 列有「姓名＋工號」標題列的分頁
+  const prefer = ['員工清冊','人員清冊','員工名冊','人員主檔'];
+  const _hasHdr339 = n => {
+    try {
+      const rs = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', raw: false, blankrows: true }).slice(0, 10);
+      return rs.some(r => { const j = r.map(v => String(v == null ? '' : v)).join('§'); return j.includes('姓名') && (j.includes('工號') || j.includes('員工代號')); });
+    } catch (e) { return false; }
+  };
+  let usedSheet = wb.SheetNames.find(n => prefer.some(p => n.includes(p))) || wb.SheetNames.find(_hasHdr339) || wb.SheetNames[0];
   const ws = wb.Sheets[usedSheet];
 
   // blankrows:true 保留行號，raw:false 讓日期轉字串
@@ -9540,11 +9551,15 @@ function parseExcelBinary(buffer, fileName) {
   };
   const _birthWarn = [];   // v337：看不懂的出生年月（工號「原字」）
 
+  // v339：申請表的「必填／選填」說明列、「範例」列不是員工，跳過
+  const _hint339 = v => /^(必填|選填|必填·|選填·)/.test(v);
+  let _skip339 = 0;
   for (let i = hRow + 1; i < allRows.length; i++) {
     const row = allRows[i];
     const name  = get(row, idx.name);
     const empId = get(row, idx.empId);
     if (!name || !empId) continue;
+    if (_hint339(name) || _hint339(empId) || row.some(v => /^範例\s*\d*$/.test(c(v)))) { _skip339++; continue; }
     // v337：出生年月＝日期格子讀原始值，其他照文字判讀；判讀不出 YYYY/MM 的不帶入（追加／比對時保留原值）並列出
     const _bRaw = get(row, idx.birth);
     let _bYM = birthCellYM(i) || birthToYM(_bRaw);
@@ -9582,6 +9597,7 @@ function parseExcelBinary(buffer, fileName) {
   document.getElementById('excelLoadedBar').style.display = 'flex';
   document.getElementById('excelLoadedInfo').textContent =
     '✓ 已讀取「' + fileName + '」· 工作表：' + usedSheet + ' · 共 ' + parsed.length + ' 筆' +
+    (_skip339 ? ' · 已跳過說明列／範例列 ' + _skip339 + ' 列' : '') +   // v339
     (_birthWarn.length ? ' · ⚠ 出生年月看不懂 ' + _birthWarn.length + ' 筆，這幾筆不帶入出生年月（原有的保留）：' + _birthWarn.slice(0, 10).join('、') + (_birthWarn.length > 10 ? '…' : '') : '');
   if (_birthWarn.length) showToast('出生年月看不懂 ' + _birthWarn.length + ' 筆，不帶入（見檔名旁說明）', 'error');
   document.getElementById('batchTotal').textContent = parsed.length;
